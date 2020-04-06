@@ -262,17 +262,21 @@ class Trainer:
         self.monitor, self.monitor_best, self.monitor_best_epoch = None, None, -1
         if "monitor" in trainer_config and trainer_config["monitor"]:
             self.monitor = trainer_config["monitor"]
-            assert any([self.monitor in mset for mset in [self.train_metrics, self.valid_metrics]]), \
-                f"metric with name '{self.monitor}' could not be found in training/validation metrics"
-            metric = self.valid_metrics[self.monitor] if self.monitor in self.valid_metrics \
-                else self.train_metrics[self.monitor]  # makes no sense to search for it in test metrics...
-            assert isinstance(metric, thelper.optim.metrics.Metric), \
-                "monitoring target should be an actual 'metric' class that returns a scalar!"
-            assert metric.goal in [thelper.optim.Metric.minimize, thelper.optim.Metric.maximize], \
-                "monitored metric does not return proper optimization goal"
-            self.monitor_goal = metric.goal
-            self.monitor_best = thelper.optim.Metric.minimize if metric.goal == thelper.optim.Metric.maximize \
-                else thelper.optim.Metric.maximize
+            if self.monitor == "loss":
+                self.monitor_goal = thelper.optim.Metric.minimize
+                self.monitor_best = thelper.optim.Metric.maximize
+            else:
+                assert any([self.monitor in mset for mset in [self.train_metrics, self.valid_metrics]]), \
+                    f"metric with name '{self.monitor}' could not be found in training/validation metrics"
+                metric = self.valid_metrics[self.monitor] if self.monitor in self.valid_metrics \
+                    else self.train_metrics[self.monitor]  # makes no sense to search for it in test metrics...
+                assert isinstance(metric, thelper.optim.metrics.Metric), \
+                    "monitoring target should be an actual 'metric' class that returns a scalar!"
+                assert metric.goal in [thelper.optim.Metric.minimize, thelper.optim.Metric.maximize], \
+                    "monitored metric does not return proper optimization goal"
+                self.monitor_goal = metric.goal
+                self.monitor_best = thelper.optim.Metric.minimize if metric.goal == thelper.optim.Metric.maximize \
+                    else thelper.optim.Metric.maximize
             self.logger.debug(f"will monitor metric '{self.monitor}' for best state checkpointing/early stopping")
 
         # parse checkpoint data from previous run (if available)
@@ -485,15 +489,16 @@ class Trainer:
             model.train()
             if hasattr(self.train_loader, "set_epoch") and callable(self.train_loader.set_epoch):
                 self.train_loader.set_epoch(self.current_epoch)
-            latest_loss = self.train_epoch(model, self.current_epoch, self.devices, loss, optimizer,
-                                           self.train_loader, self.train_metrics, self.output_paths["train"])
+            train_loss = self.train_epoch(model, self.current_epoch, self.devices, loss, optimizer,
+                                          self.train_loader, self.train_metrics, self.output_paths["train"])
             self._write_metrics_data(self.current_epoch, self.train_metrics,
                                      self.writers["train"], self.output_paths["train"],
-                                     loss=latest_loss, optimizer=optimizer)
+                                     loss=train_loss, optimizer=optimizer)
             train_metric_vals = {metric_name: metric.eval() for metric_name, metric in self.train_metrics.items()
                                  if isinstance(metric, thelper.optim.metrics.Metric)}
-            result = {"train/loss": latest_loss, "train/metrics": train_metric_vals}
+            result = {"train/loss": train_loss, "train/metrics": train_metric_vals}
             monitor_type_key = "train/metrics"  # if we cannot run validation, will monitor progression on training metrics
+            valid_loss = None
             if self.valid_loader:
                 self._set_rng_state(self.valid_loader.seeds, self.current_epoch)
                 model.eval()
@@ -502,10 +507,12 @@ class Trainer:
                     metric.reset()  # force reset here, we always evaluate from a clean state
                 if hasattr(self.valid_loader, "set_epoch") and callable(self.valid_loader.set_epoch):
                     self.valid_loader.set_epoch(self.current_epoch)
-                self.eval_epoch(model, self.current_epoch, self.devices, self.valid_loader,
-                                self.valid_metrics, self.output_paths["valid"])
+                valid_loss = self.eval_epoch(model, self.current_epoch, self.devices, self.valid_loader,
+                                             self.valid_metrics, self.output_paths["valid"])
+                # note: valid_loss might be None if evaluator did not implement/compute it
                 self._write_metrics_data(self.current_epoch, self.valid_metrics,
-                                         self.writers["valid"], self.output_paths["valid"])
+                                         self.writers["valid"], self.output_paths["valid"],
+                                         loss=valid_loss)
                 valid_metric_vals = {metric_name: metric.eval() for metric_name, metric in self.valid_metrics.items()
                                      if isinstance(metric, thelper.optim.metrics.Metric)}
                 result = {**result, "valid/metrics": valid_metric_vals}
@@ -516,10 +523,15 @@ class Trainer:
                     viz_data = thelper.viz.visualize(model, self.task, wrapped_loader, viz_type=viz, **kwargs)
                     self._write_data(viz_data, "epoch/", f"-{self.current_epoch:04d}", self.writers["valid"],
                                      self.output_paths["valid"], self.current_epoch)
+            latest_loss = valid_loss if valid_loss is not None else train_loss
             new_best = False
             monitor_val = None
+            if self.monitor == "loss":
+                monitor_val = latest_loss
+                if self.monitor_best > latest_loss:
+                    new_best = True
             for key, value in result.items():
-                if key == monitor_type_key and self.monitor is not None:
+                if key == monitor_type_key and self.monitor is not None and self.monitor != "loss":
                     assert self.monitor in value, f"not monitoring required variable '{self.monitor}' in metrics"
                     monitor_val = value[self.monitor]
                     if (self.monitor_goal == thelper.optim.Metric.minimize and monitor_val < self.monitor_best) or \
