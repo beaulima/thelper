@@ -823,10 +823,10 @@ class Trainer:
             "monitor_best_epoch": self.monitor_best_epoch,
             "config": self.config  # note: this is the global app config
         }
-        filename = f"ckpt.{epoch:04d}.{log_stamp}.pth"
-        filename = os.path.join(self.checkpoint_dir, filename)
-        self.logger.debug(f"writing checkpoint to {os.path.abspath(filename)}")
-        torch.save(curr_state, filename)
+        #filename = f"ckpt.{epoch:04d}.{log_stamp}.pth"
+        #filename = os.path.join(self.checkpoint_dir, filename)
+        #self.logger.debug(f"writing checkpoint to {os.path.abspath(filename)}")
+        #torch.save(curr_state, filename)
         if save_best:
             filename_best = os.path.join(self.checkpoint_dir, "ckpt.best.pth")
             self.logger.debug(f"writing checkpoint to {os.path.abspath(filename_best)}")
