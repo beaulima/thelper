@@ -404,11 +404,11 @@ def make_argparser():
     ap.add_argument("--force-stdout", action="store_true", default=False, help="force logging output to stdout instead of stderr")
     subparsers = ap.add_subparsers(title="Operating mode", dest="mode")
     new_ap = subparsers.add_parser("new", help="creates a new session from a config file")
-    new_ap.add_argument("cfg_path", type=str, help="path to the session configuration file")
-    new_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    new_ap.add_argument("--config", required=True, type=str, help="path to the session configuration file")
+    new_ap.add_argument("--save-dir", required=True, type=str, help="path to the session output root directory")
     cl_new_ap = subparsers.add_parser("cl_new", help="creates a new session from a config file for the cluster")
-    cl_new_ap.add_argument("cfg_path", type=str, help="path to the session configuration file")
-    cl_new_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    cl_new_ap.add_argument("--config", required=True, type=str, help="path to the session configuration file")
+    cl_new_ap.add_argument("--save-dir", required=True, type=str, help="path to the session output root directory")
     resume_ap = subparsers.add_parser("resume", help="resume a session from a checkpoint file")
     resume_ap.add_argument("ckpt_path", type=str, help="path to the checkpoint (or directory) to resume training from")
     resume_ap.add_argument("-s", "--save-dir", default=None, type=str, help="path to the session output root directory")
@@ -418,16 +418,16 @@ def make_argparser():
     resume_ap.add_argument("-t", "--task-compat", default=None, type=str, choices=TASK_COMPAT_CHOICES,
                            help="task compatibility mode to use to resolve any discrepancy between loaded tasks")
     viz_ap = subparsers.add_parser("viz", help="visualize the loaded data for a training/eval session")
-    viz_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
+    viz_ap.add_argument("--config", required=True, type=str, help="path to the session configuration file (or session directory)")
     annot_ap = subparsers.add_parser("annot", help="launches a dataset annotation session with a GUI tool")
-    annot_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
-    annot_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    annot_ap.add_argument("--config", required=True, type=str, help="path to the session configuration file (or session directory)")
+    annot_ap.add_argument("--save-dir", required=True, type=str, help="path to the session output root directory")
     split_ap = subparsers.add_parser("split", help="launches a dataset splitting session from a config file")
-    split_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
-    split_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    split_ap.add_argument("--config", required=True, type=str, help="path to the session configuration file (or session directory)")
+    split_ap.add_argument("--save-dir", required=True, type=str, help="path to the session output root directory")
     split_ap = subparsers.add_parser("export", help="launches a model exportation session from a config file")
-    split_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
-    split_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    split_ap.add_argument("--config", required=True, type=str, help="path to the session configuration file (or session directory)")
+    split_ap.add_argument("--save-dir", required=True, type=str, help="path to the session output root directory")
     return ap
 
 
@@ -475,8 +475,8 @@ def main(args=None, argparser=None):
     if isinstance(args, int):
         return args  # CLI must exit immediately with provided error code
     if args.mode == "new" or args.mode == "cl_new":
-        thelper.logger.debug("parsing config at '%s'" % args.cfg_path)
-        config = thelper.utils.load_config(args.cfg_path)
+        thelper.logger.debug("parsing config at '%s'" % args.config)
+        config = thelper.utils.load_config(args.config)
         if args.mode == "cl_new":
             trainer_config = thelper.utils.get_key_def("trainer", config, {})
             device = thelper.utils.get_key_def("device", trainer_config, None)
@@ -497,8 +497,8 @@ def main(args=None, argparser=None):
             save_dir = thelper.utils.get_save_dir(out_root=None, dir_name=None, config=override_config)
         resume_session(ckptdata, save_dir, config=override_config, eval_only=args.eval_only, task_compat=args.task_compat)
     else:
-        thelper.logger.debug("parsing config at '%s'" % args.cfg_path)
-        config = thelper.utils.load_config(args.cfg_path)
+        thelper.logger.debug("parsing config at '%s'" % args.config)
+        config = thelper.utils.load_config(args.config)
         if args.mode == "viz":
             visualize_data(config)
         elif args.mode == "annot":
