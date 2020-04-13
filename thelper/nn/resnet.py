@@ -445,8 +445,8 @@ class AEResNet(ResNet):
 
 
 class FakeModule(torch.nn.Module):
-    def forward(self, *inputs):
-        return *inputs
+    def forward(self, inputs):
+        return inputs
 
 
 class AESkipResNet(ResNet):
