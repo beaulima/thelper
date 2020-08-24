@@ -450,7 +450,7 @@ class ImageFolderDataset(ClassificationDataset):
         return sample
 
 
-class SuperResFolderDataset(Dataset):
+class SuperResDataset(Dataset):
     """Image folder dataset specialization interface for super-resolution tasks.
 
     This specialization is used to parse simple image subfolders or to use a file text containing the path of each image.
@@ -531,7 +531,7 @@ class SuperResFolderDataset(Dataset):
         if not class_map:
             raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
         meta_keys = [self.path_key, self.idx_key, self.label_key]
-        super(SuperResFolderDataset, self).__init__(transforms=transforms)
+        super(SuperResDataset, self).__init__(transforms=transforms)
         self.task = thelper.tasks.SuperResolution(input_key=self.lowres_image_key, target_key=self.highres_image_key, meta_keys=meta_keys)
         self.samples = samples
 
