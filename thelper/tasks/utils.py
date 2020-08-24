@@ -79,22 +79,32 @@ def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typin
     if not isinstance(tasks, list):
         raise AssertionError("tasks should be provided as list")
     ref_task = None
-    for task in tasks:
-        if task is None:
-            # skip all undefined tasks
-            continue
-        if not isinstance(task, thelper.tasks.Task):
-            raise AssertionError("all tasks should derive from thelper.tasks.Task")
-        if ref_task is None:
-            # no reference task set; take the first instance and continue to next
-            ref_task = task
-            continue
-        if type(ref_task) != Task:
-            # reference task already specialized, we can ask it for compatible instances
-            ref_task = ref_task.get_compat(task)
-        else:
-            # otherwise, keep asking the new one to stay compatible with the base ref
-            ref_task = task.get_compat(ref_task)
+    all_same = True
+    # Check all task are the same and select one of them as global task
+    for ref_task1 in tasks:
+        ref_task = ref_task1
+        for ref_task2 in tasks:
+            if type(ref_task1) != type(ref_task2):
+                all_same = False
+    # Otherwise try to compose a compatible task
+    if not all_same:
+        ref_task = ref_task
+        for task in tasks:
+            if task is None:
+                # skip all undefined tasks
+                continue
+            if not isinstance(task, thelper.tasks.Task):
+                raise AssertionError("all tasks should derive from thelper.tasks.Task")
+            if ref_task is None:
+                # no reference task set; take the first instance and continue to next
+                ref_task = task
+                continue
+            if type(ref_task) != Task:
+                # reference task already specialized, we can ask it for compatible instances
+                ref_task = ref_task.get_compat(task)
+            else:
+                # otherwise, keep asking the new one to stay compatible with the base ref
+                ref_task = task.get_compat(ref_task)
     return ref_task
 
 
