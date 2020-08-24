@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Command-line module, for use with a ``__main__`` entrypoint.
 
@@ -55,6 +56,7 @@ def create_session(config, save_dir):
     else:
         trainer.eval()
     logger.debug("all done")
+    thelper.utils.report_orion_results(trainer)
     return trainer.outputs
 
 
@@ -147,6 +149,7 @@ def resume_session(ckptdata, save_dir, config=None, eval_only=False, task_compat
         logger.info("resuming training session '%s' @ epoch %d" % (trainer.name, trainer.current_epoch))
         trainer.train()
     logger.debug("all done")
+    thelper.utils.report_orion_results(trainer)
     return trainer.outputs
 
 
@@ -494,41 +497,40 @@ def make_argparser():
     ap = argparse.ArgumentParser(description='thelper model trainer application')
     ap.add_argument("--version", default=False, action="store_true", help="prints the version of the library and exits")
     ap.add_argument("-l", "--log", default=None, type=str, help="path to the top-level log file (default: None)")
-    ap.add_argument("-v", "--verbose", action="count", default=0, help="set logging terminal verbosity level (additive)")
+    ap.add_argument("-v", "--verbose", action="count", default=3, help="set logging terminal verbosity level (additive)")
     ap.add_argument("--silent", action="store_true", default=False, help="deactivates all console logging activities")
     ap.add_argument("--force-stdout", action="store_true", default=False, help="force logging output to stdout instead of stderr")
     subparsers = ap.add_subparsers(title="Operating mode", dest="mode")
     new_ap = subparsers.add_parser("new", help="creates a new session from a config file")
-    new_ap.add_argument("cfg_path", type=str, help="path to the session configuration file")
-    new_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    new_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file")
+    new_ap.add_argument("-d", "--save-dir", required=True, type=str, help="path to the session output root directory")
     cl_new_ap = subparsers.add_parser("cl_new", help="creates a new session from a config file for the cluster")
-    cl_new_ap.add_argument("cfg_path", type=str, help="path to the session configuration file")
-    cl_new_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    cl_new_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file")
+    cl_new_ap.add_argument("-d", "--save-dir", required=True, type=str, help="path to the session output root directory")
     resume_ap = subparsers.add_parser("resume", help="resume a session from a checkpoint file")
-    resume_ap.add_argument("ckpt_path", type=str, help="path to the checkpoint (or directory) to resume training from")
-    resume_ap.add_argument("-s", "--save-dir", default=None, type=str, help="path to the session output root directory")
+    resume_ap.add_argument("--ckpt-path", default=None, type=str, help="path to the checkpoint (or directory) to reload")
+    resume_ap.add_argument("-d", "--save-dir", default=None, type=str, help="path to the session output root directory")
     resume_ap.add_argument("-m", "--map-location", default=None, help="map location for loading data (default=None)")
-    resume_ap.add_argument("-c", "--override-cfg", default=None, help="override config file path (default=None)")
+    resume_ap.add_argument("-c", "--override-config", default=None, help="override config file path (default=None)")
     resume_ap.add_argument("-e", "--eval-only", default=False, action="store_true", help="only run evaluation pass (valid+test)")
     resume_ap.add_argument("-t", "--task-compat", default=None, type=str, choices=TASK_COMPAT_CHOICES,
                            help="task compatibility mode to use to resolve any discrepancy between loaded tasks")
     viz_ap = subparsers.add_parser("viz", help="visualize the loaded data for a training/eval session")
-    viz_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
+    viz_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file (or session directory)")
     annot_ap = subparsers.add_parser("annot", help="launches a dataset annotation session with a GUI tool")
-    annot_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
-    annot_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    annot_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file (or session directory)")
+    annot_ap.add_argument("-d", "--save-dir", required=True, type=str, help="path to the session output root directory")
     split_ap = subparsers.add_parser("split", help="launches a dataset splitting session from a config file")
-    split_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
-    split_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
-    split_ap = subparsers.add_parser("export", help="launches a model exportation session from a config file")
-    split_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
-    split_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
+    split_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file (or session directory)")
+    split_ap.add_argument("-d", "--save-dir", required=True, type=str, help="path to the session output root directory")
+    export_ap = subparsers.add_parser("export", help="launches a model exportation session from a config file")
+    export_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file (or session directory)")
+    export_ap.add_argument("-d", "--save-dir", required=True, type=str, help="path to the session output root directory")
     infer_ap = subparsers.add_parser("infer", help="creates a inference session from a config file")
-    infer_ap.add_argument("cfg_path", type=str, help="path to the session configuration file (or session directory)")
-    infer_ap.add_argument("save_dir", type=str, help="path to the session output root directory")
-    infer_ap.add_argument("--ckpt-path", type=str,
-                          help="path to the checkpoint (or directory) to use for inference "
-                               "(otherwise uses model checkpoint from configuration)")
+    infer_ap.add_argument("--ckpt-path", type=str, help="path to the checkpoint (or directory) to use for inference "
+                                                        "(otherwise uses model checkpoint from configuration)")
+    infer_ap.add_argument("-c", "--config", type=str, help="path to the session configuration file (or session directory)")
+    infer_ap.add_argument("-d", "--save-dir", type=str, help="path to the session output root directory")
     return ap
 
 
@@ -577,8 +579,8 @@ def main(args=None, argparser=None):
     if isinstance(args, int):
         return args  # CLI must exit immediately with provided error code
     if args.mode == "new" or args.mode == "cl_new":
-        thelper.logger.debug("parsing config at '%s'" % args.cfg_path)
-        config = thelper.utils.load_config(args.cfg_path)
+        thelper.logger.debug("parsing config at '%s'" % args.config)
+        config = thelper.utils.load_config(args.config)
         if args.mode == "cl_new":
             trainer_config = thelper.utils.get_key_def("trainer", config, {})
             device = thelper.utils.get_key_def("device", trainer_config, None)
@@ -586,25 +588,27 @@ def main(args=None, argparser=None):
                 raise AssertionError("cannot specify device in config for cluster sessions, it is determined at runtime")
         create_session(config, args.save_dir)
     elif args.mode == "resume":
-        ckptdata = thelper.utils.load_checkpoint(args.ckpt_path, map_location=args.map_location,
-                                                 always_load_latest=(not args.eval_only))
+        ckptdata = None
+        if args.ckpt_path is not None:
+            ckptdata = thelper.utils.load_checkpoint(args.ckpt_path, map_location=args.map_location,
+                                                     always_load_latest=(not args.eval_only))
         override_config = None
-        if args.override_cfg:
-            thelper.logger.debug("parsing override config at '%s'" % args.override_cfg)
-            override_config = thelper.utils.load_config(args.override_cfg)
+        if args.override_config:
+            thelper.logger.debug(f"parsing override config at: {args.override_config}")
+            override_config = thelper.utils.load_config(args.override_config)
         save_dir = args.save_dir
-        if save_dir is None:
+        if save_dir is None and args.ckpt_path is not None:
             save_dir = thelper.utils.get_checkpoint_session_root(args.ckpt_path)
         if save_dir is None:
             save_dir = thelper.utils.get_save_dir(out_root=None, dir_name=None, config=override_config)
         resume_session(ckptdata, save_dir, config=override_config, eval_only=args.eval_only, task_compat=args.task_compat)
     elif args.mode == "infer":
-        thelper.logger.debug("parsing config at '%s'" % args.cfg_path)
-        config = thelper.utils.load_config(args.cfg_path)
+        thelper.logger.debug(f"parsing config at: {args.config}")
+        config = thelper.utils.load_config(args.config)
         inference_session(config, save_dir=args.save_dir, ckpt_path=args.ckpt_path)
     else:
-        thelper.logger.debug("parsing config at '%s'" % args.cfg_path)
-        config = thelper.utils.load_config(args.cfg_path)
+        thelper.logger.debug("parsing config at '%s'" % args.config)
+        config = thelper.utils.load_config(args.config)
         if args.mode == "viz":
             visualize_data(config)
         elif args.mode == "annot":

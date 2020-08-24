@@ -1,5 +1,5 @@
 {% set name = "thelper" %}
-{% set version = "0.5.0-rc" %}
+{% set version = "0.6.1" %}
 
 package:
   name: "{{ name|lower }}"
@@ -16,27 +16,13 @@ build:
 
 requirements:
   host:
-    - cython
-    - gitpython
-    - h5py
-    - lz4
-    - matplotlib
-    - numpy
-    - opencv
-    - pillow
-    - pip
     - python {{ python }}
-    - pyyaml
-    - scikit-learn
-    - six
-    - tensorboardx
-    - pytorch
-    - torchvision
-    - tqdm
   run:
+    # note: this list *should* be kept up-to-date with deps in conda-env.yml!
     - cython
     - gitpython
     - h5py
+    - hdf5plugin
     - lz4
     - matplotlib
     - numpy

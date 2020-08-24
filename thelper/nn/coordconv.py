@@ -52,8 +52,9 @@ class AddCoords(torch.nn.Module):
 class CoordConv2d(torch.nn.Module):
     """CoordConv-equivalent of torch's default Conv2d model layer.
 
-    See Liu et al. (2018), "An intriguing failing of convolutional neural networks..."
-    for more information (https://arxiv.org/abs/1807.03247).
+    .. seealso::
+        | Liu et al., An Intriguing Failing of Convolutional Neural Networks and the CoordConv Solution`
+          <https://arxiv.org/abs/1807.03247>`_ [arXiv], 2018.
     """
 
     def __init__(self, in_channels, *args, centered=True, normalized=True,
@@ -73,8 +74,9 @@ class CoordConv2d(torch.nn.Module):
 class CoordConvTranspose2d(torch.nn.Module):
     """CoordConv-equivalent of torch's default ConvTranspose2d model layer.
 
-    See Liu et al. (2018), "An intriguing failing of convolutional neural networks..."
-    for more information (https://arxiv.org/abs/1807.03247).
+    .. seealso::
+        | Liu et al., An Intriguing Failing of Convolutional Neural Networks and the CoordConv Solution`
+          <https://arxiv.org/abs/1807.03247>`_ [arXiv], 2018.
     """
 
     def __init__(self, in_channels, *args, centered=True, normalized=True,
@@ -83,11 +85,11 @@ class CoordConvTranspose2d(torch.nn.Module):
         self.addcoord = AddCoords(centered=centered, normalized=normalized, noise=noise,
                                   radius_channel=radius_channel, scale=scale)
         extra_ch = 3 if radius_channel else 2
-        self.convT = torch.nn.ConvTranspose2d(in_channels + extra_ch, *args, **kwargs)
+        self.conv = torch.nn.ConvTranspose2d(in_channels + extra_ch, *args, **kwargs)
 
     def forward(self, in_tensor):
         out = self.addcoord(in_tensor)
-        out = self.convT(out)
+        out = self.conv(out)
         return out
 
 

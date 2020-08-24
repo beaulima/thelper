@@ -115,8 +115,8 @@ class SessionRunner:
         self.skip_eval_iter = thelper.utils.get_key_def("skip_eval_iter", trainer_config, 0)
 
         # parse and prepare tbx stuff
-        self.use_tbx = thelper.utils.str2bool(thelper.utils.get_key_def(["use_tbx", "tbx", "use_tb", "tb", "tensorboard"],
-                                                                        trainer_config, False))
+        tbx_config_flags = ["use_tbx", "tbx", "use_tb", "tb", "tensorboard"]
+        self.use_tbx = thelper.utils.str2bool(thelper.utils.get_key_def(tbx_config_flags, trainer_config, False))
         if self.use_tbx:
             try:
                 import tensorboardX
@@ -183,17 +183,21 @@ class SessionRunner:
         self.monitor, self.monitor_best, self.monitor_best_epoch = None, None, -1
         if "monitor" in trainer_config and trainer_config["monitor"]:
             self.monitor = trainer_config["monitor"]
-            assert any([self.monitor in mset for mset in [self.train_metrics, self.valid_metrics]]), \
-                f"metric with name '{self.monitor}' could not be found in training/validation metrics"
-            metric = self.valid_metrics[self.monitor] if self.monitor in self.valid_metrics \
-                else self.train_metrics[self.monitor]  # makes no sense to search for it in test metrics...
-            assert isinstance(metric, thelper.optim.metrics.Metric), \
-                "monitoring target should be an actual 'metric' class that returns a scalar!"
-            assert metric.goal in [thelper.optim.Metric.minimize, thelper.optim.Metric.maximize], \
-                "monitored metric does not return proper optimization goal"
-            self.monitor_goal = metric.goal
-            self.monitor_best = thelper.optim.Metric.minimize if metric.goal == thelper.optim.Metric.maximize \
-                else thelper.optim.Metric.maximize
+            if self.monitor == "loss":
+                self.monitor_goal = thelper.optim.Metric.minimize
+                self.monitor_best = thelper.optim.Metric.maximize
+            else:
+                assert any([self.monitor in mset for mset in [self.train_metrics, self.valid_metrics]]), \
+                    f"metric with name '{self.monitor}' could not be found in training/validation metrics"
+                metric = self.valid_metrics[self.monitor] if self.monitor in self.valid_metrics \
+                    else self.train_metrics[self.monitor]  # makes no sense to search for it in test metrics...
+                assert isinstance(metric, thelper.optim.metrics.Metric), \
+                    "monitoring target should be an actual 'metric' class that returns a scalar!"
+                assert metric.goal in [thelper.optim.Metric.minimize, thelper.optim.Metric.maximize], \
+                    "monitored metric does not return proper optimization goal"
+                self.monitor_goal = metric.goal
+                self.monitor_best = thelper.optim.Metric.minimize if metric.goal == thelper.optim.Metric.maximize \
+                    else thelper.optim.Metric.maximize
             self.logger.debug(f"will monitor metric '{self.monitor}' for best state checkpointing/early stopping")
 
         # parse checkpoint data from previous run (if available)
@@ -210,9 +214,8 @@ class SessionRunner:
         for cname, mset in zip(["train", "valid", "test"], [self.train_metrics, self.valid_metrics, self.test_metrics]):
             # parse user (custom) callback
             user_callback_keys = [f"{cname}_iter_callback", f"{cname}_callback", "callback"]
-            user_callback = \
-                thelper.utils.get_key_def(user_callback_keys,
-                                          trainer_config)  # type: Optional[thelper.typedefs.IterCallbackType]
+            user_callback = thelper.utils.get_key_def(
+                user_callback_keys, trainer_config)  # type: Optional[thelper.typedefs.IterCallbackType]
             if user_callback is not None:
                 assert f"{cname}_user_callback" not in mset, f"metrics set already had a '{cname}_user_callback' in it"
                 mset[f"{cname}_user_callback"] = thelper.train.utils.PredictionCallback(user_callback)
@@ -279,7 +282,7 @@ class SessionRunner:
             return model.to(dev)
 
     @staticmethod
-    def _move_tensor(tensor, dev, detach=False):
+    def _move_tensor(tensor, dev, non_blocking=True, detach=False):
         """Uploads a tensor to a specific device."""
         if isinstance(tensor, (list, tuple)):
             return [SessionRunner._move_tensor(t, dev) for t in tensor]
@@ -292,9 +295,9 @@ class SessionRunner:
                 out = tensor.cpu()
             else:
                 # no reason to have multiple devices if not cuda-enabled GPUs
-                out = tensor.cuda(dev[0])
+                out = tensor.cuda(dev[0], non_blocking=non_blocking)
         else:
-            out = tensor.to(dev)
+            out = tensor.to(dev, non_blocking=non_blocking)
         return out.detach() if detach else out
 
     def _load_optimization(self, model, dev):
@@ -431,7 +434,7 @@ class SessionRunner:
                         writer.add_text(f"{writer_prefix}{key}", val, idx)
                     else:
                         writer.add_scalar(f"{writer_prefix}{key}", val, idx)
-            if key.endswith("/image"):
+            if key.endswith("/image") and val is not None:  # some metrics got the callable but return None
                 assert isinstance(val, np.ndarray) and len(val.shape) == 3 and val.shape[2] == 3, \
                     "unexpected image format (should be numpy array with RGB channels)"
                 image_ext = thelper.utils.get_key_def(key + "/extension", data, "png")

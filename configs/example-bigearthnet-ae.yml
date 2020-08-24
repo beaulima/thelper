@@ -1,0 +1,54 @@
+datasets:
+  bigearthnet:
+    type: thelper.data.geo.bigearthnet.BigEarthNet
+    params:
+      hdf5_path: "data/bigearthnet/bigearthnet-thelper.hdf5"
+      cache_path: "data/cache"
+      keep_file_open: true
+loaders:
+  batch_size: 256
+  train_shuffle: true
+  valid_shuffle: false
+  test_shuffle: false
+  valid_seed: 0
+  test_seed: 0
+  torch_seed: 0
+  numpy_seed: 0
+  random_seed: 0
+  workers: 6
+  pin_memory: false
+  drop_last: false
+  base_transforms:
+      - operation: torchvision.transforms.ToTensor
+        target_key: image
+  train_split:
+    bigearthnet: 0.8
+  valid_split:
+    bigearthnet: 0.2
+model:
+  type: thelper.nn.resnet.AutoEncoderResNet
+  params:
+    block: "thelper.nn.resnet.SqueezeExcitationBlock"
+    layers: [2, 2, 2, 2]
+    strides: [1, 2, 2, 2]
+    input_channels: 4
+    flexible_input_res: false
+    conv1_kernel_size: 5
+    conv1_stride: 2
+    pool_size: 4
+    coordconv: true
+    output_pads: [1, 0, 1, 1, 1]  # for 120x120
+trainer:
+  type: thelper.train.ae.AutoEncoderTrainer
+  reconstr_display_count: 16
+  reconstr_display_mean: "loader.dataset.image_mean"
+  reconstr_display_stddev: "loader.dataset.image_stddev"
+  reconstr_edges: true
+  reconstr_scale: 1.0
+  use_multilabel: true
+  use_tbx: true
+  epochs: 30
+  monitor: loss
+  optimization:
+    optimizer:
+      type: torch.optim.Adam

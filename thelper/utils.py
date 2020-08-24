@@ -24,6 +24,8 @@ import time
 from distutils.version import LooseVersion
 from typing import TYPE_CHECKING
 
+import h5py
+import hdf5plugin
 import numpy as np
 import torch
 import yaml
@@ -33,11 +35,14 @@ import thelper.typedefs  # noqa: F401
 if TYPE_CHECKING:
     from typing import Any, AnyStr, Callable, Dict, List, Optional, Tuple, Type, Union  # noqa: F401
     from types import FunctionType  # noqa: F401
+    from thelper.session.base import SessionRunner
 
 logger = logging.getLogger(__name__)
 bypass_queries = False
 warned_generic_draw = False
 fixed_yaml_parsing = False
+no_compression_flags = ["None", "none", "raw", "", None]
+chunk_compression_flags = ["chunk_lz4", "gzip", "lzf", "szip"]
 
 
 class Struct:
@@ -351,7 +356,8 @@ def migrate_checkpoint(ckptdata,  # type: thelper.typedefs.CheckpointContentType
             ckptdata["task"] = str(thelper.tasks.classif.Classification(class_names=ckptdata["task"].class_names,
                                                                         input_key=ckptdata["task"].input_key,
                                                                         label_key=ckptdata["task"].label_key,
-                                                                        meta_keys=ckptdata["task"].meta_keys))
+                                                                        meta_keys=ckptdata["task"].meta_keys,
+                                                                        multi_label=False))
         # move 'state_dict' field to 'model'
         if "state_dict" in ckptdata:
             ckptdata["model"] = ckptdata["state_dict"]
@@ -788,10 +794,10 @@ def encode_data(data, approach="lz4", **kwargs):
     .. seealso::
         | :func:`thelper.utils.decode_data`
     """
-    supported_approaches = ["none", "lz4", "jpg", "png"]
-    if approach not in supported_approaches:
-        raise AssertionError(f"unexpected approach type (got '{approach}')")
-    if approach == "none":
+    supported_approaches = [*no_compression_flags, "lz4", "jpg", "png"]
+    assert approach in supported_approaches, f"unexpected approach '{approach}'"
+    if approach in no_compression_flags:
+        assert not kwargs
         return data
     elif approach == "lz4":
         import lz4
@@ -804,8 +810,7 @@ def encode_data(data, approach="lz4", **kwargs):
         ret, buf = cv.imencode(".png", data, **kwargs)
     else:
         raise NotImplementedError
-    if not ret:
-        raise AssertionError("failed to encode data")
+    assert ret, "failed to encode data"
     return buf
 
 
@@ -819,10 +824,10 @@ def decode_data(data, approach="lz4", **kwargs):
     .. seealso::
         | :func:`thelper.utils.encode_data`
     """
-    supported_approach_types = ["none", "lz4", "jpg", "png"]
-    if approach not in supported_approach_types:
-        raise AssertionError(f"unexpected approach type (got '{approach}')")
-    if approach == "none":
+    supported_approaches = [*no_compression_flags, "lz4", "jpg", "png"]
+    assert approach in supported_approaches, f"unexpected approach '{approach}'"
+    if approach in no_compression_flags:
+        assert not kwargs
         return data
     elif approach == "lz4":
         import lz4
@@ -1307,7 +1312,7 @@ def load_config(path, as_json=False, add_name_if_missing=True, **kwargs):
             list(u'-+0123456789.'))
         fixed_yaml_parsing = True
     ext = os.path.splitext(path)[-1]
-    if ext in [".json", ".yml", ".yaml"] or as_json:
+    if ext in [".json", ".yml", ".yaml", ".conf"] or as_json:
         with open(path) as fd:
             assert not kwargs, "yaml safe load takes no extra args"
             config = yaml.safe_load(fd)  # also supports json
@@ -1474,3 +1479,125 @@ def set_matplotlib_agg():
     """Sets the matplotlib backend to Agg."""
     import matplotlib
     matplotlib.use('Agg')
+
+
+def create_hdf5_dataset(fd, name, max_len, batch_like, compression="chunk_lz4", chunk_size=None, flatten=True):
+    """Creates an HDF5 dataset inside the provided HDF5.File object descriptor."""
+    assert batch_like.ndim >= 1, "minibatch must always contain at least batch dim"
+    compression_args = {}
+    if isinstance(compression, (tuple, list)) and len(compression) == 2:
+        compression_args = compression[1]
+        compression = compression[0]
+    flat_dtype = h5py.special_dtype(vlen=np.uint8)
+    if batch_like.ndim > 1 and flatten:
+        dset = fd.create_dataset(name, shape=(max_len,), maxshape=(max_len,), dtype=flat_dtype)
+        dset.attrs["orig_shape"] = batch_like.shape[1:]  # removes batch dim
+    elif batch_like.ndim > 1:
+        assert compression in no_compression_flags or compression in chunk_compression_flags, \
+            f"unsupported chunk-compress filter '{compression}'"
+        assert np.issubdtype(batch_like.dtype, np.number), "invalid non-flattened array subtype"
+        auto_chunker = False
+        if chunk_size is None:
+            auto_chunker = True
+            chunk_size = (1, *batch_like.shape[1:])
+        chunk_byte_size = np.multiply.reduce(chunk_size) * batch_like.dtype.itemsize
+        assert auto_chunker or 10 * (2 ** 10) <= chunk_byte_size < 2 ** 20, \
+            f"unrecommended chunk byte size ({chunk_byte_size}) should be in [10KiB,1MiB];" \
+            " see http://docs.h5py.org/en/stable/high/dataset.html#chunked-storage"
+        if compression == "chunk_lz4":
+            dset = fd.create_dataset(
+                name=name,
+                shape=(max_len, *batch_like.shape[1:]),
+                chunks=chunk_size,
+                dtype=batch_like.dtype,
+                **hdf5plugin.LZ4(nbytes=0)
+            )
+        else:
+            assert compression not in no_compression_flags or len(compression_args) == 0
+            dset = fd.create_dataset(
+                name=name,
+                shape=(max_len, *batch_like.shape[1:]),
+                chunks=chunk_size,
+                dtype=batch_like.dtype,
+                compression=compression if compression not in no_compression_flags else None,
+                **compression_args
+            )
+        dset.attrs["orig_shape"] = batch_like.shape[1:]  # removes batch dim
+    else:
+        assert thelper.utils.is_scalar(batch_like[0])
+        if np.issubdtype(batch_like.dtype, np.number):
+            assert compression in no_compression_flags, "cannot compress scalar elements"
+            dset = fd.create_dataset(name, shape=(max_len,), maxshape=(max_len,), dtype=batch_like.dtype)
+        else:
+            dset = fd.create_dataset(name, shape=(max_len,), maxshape=(max_len,), dtype=flat_dtype)
+        dset.attrs["orig_shape"] = ()
+    dset.attrs["orig_dtype"] = batch_like.dtype.str
+    dset.attrs["compression"] = "none" if compression in no_compression_flags else compression
+    return dset
+
+
+def fill_hdf5_sample(dset, dset_idx, array_idx, array, compression="chunk_lz4", **compr_kwargs):
+    """Fills a sample inside the specified HDF5 dataset object."""
+    sample = array[array_idx]
+    if compression not in chunk_compression_flags:
+        sample = thelper.utils.encode_data(sample, compression, **compr_kwargs)
+        if compression not in no_compression_flags:
+            sample = np.frombuffer(sample, dtype=np.uint8)
+    if not np.issubdtype(array.dtype, np.number):
+        if np.issubdtype(array.dtype, np.dtype(str).type):
+            assert len(array.shape) == 1, "missing impl for string array reconstr"
+            sample = sample.encode()
+        sample = np.frombuffer(sample, dtype=np.uint8)
+    dset[dset_idx] = sample
+
+
+def fetch_hdf5_sample(dset, idx, dtype="auto", shape="auto", compression="auto", **decompr_kwargs):
+    """Returns a sample from the specified HDF5 dataset object."""
+    if compression == "auto":
+        compression = dset.attrs.get("compression")
+    if shape == "auto":
+        shape = dset.attrs.get("orig_shape")
+    sample = dset[idx]
+    if compression not in chunk_compression_flags:
+        sample = thelper.utils.decode_data(sample, compression, **decompr_kwargs)
+        if dtype == "auto":
+            dtype = np.dtype(dset.attrs.get("orig_dtype"))
+        if dtype is not None:
+            if np.issubdtype(dtype, np.dtype(str).type):
+                assert shape is None or len(shape) == 0, "missing impl for string array reconstr"
+                sample = sample.tobytes().decode()
+            elif sample.dtype != dtype:
+                sample = np.frombuffer(sample, dtype=dtype)
+    else:
+        assert dtype == "auto" or dtype == sample.dtype
+    if shape is not None and len(shape) > 0 and sample.shape != tuple(shape):
+        sample = sample.reshape(shape)
+    return sample
+
+
+def get_slurm_tmpdir() -> str:
+    """Returns the local SLURM_TMPDIR path if available, or ``None``."""
+    slurm_tmpdir = os.getenv("SLURM_TMPDIR")
+    if slurm_tmpdir is not None:
+        assert os.path.isdir(slurm_tmpdir), "invalid SLURM_TMPDIR path (not directory)"
+        assert os.access(slurm_tmpdir, os.W_OK), "invalid SLURM_TMPDIR path (not writable)"
+    return slurm_tmpdir
+
+
+def report_orion_results(session_runner: "SessionRunner") -> None:
+    """Reports the results of a session runner, but only if the config allows it (true by default)."""
+    orion_config = get_key_def("orion", session_runner.config, default={})
+    orion_report_flag = get_key_def("report", orion_config, default=True)
+    if not orion_report_flag:
+        return
+    import orion.client
+    if session_runner.monitor is not None:
+        if session_runner.monitor_goal == thelper.optim.Metric.minimize:
+            report_val = session_runner.monitor_best
+        else:
+            report_val = -session_runner.monitor_best
+        orion.client.report_results([dict(
+            name=session_runner.monitor,
+            type="objective",
+            value=report_val,
+        )])

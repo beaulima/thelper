@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import os
+import pprint
 import sys
 
 import numpy as np
@@ -215,42 +216,33 @@ def create_loaders(config, save_dir=None):
                 logger.info(f"verifying sample list for dataset '{dataset_name}'...")
                 log_content = thelper.utils.load_config(dataset_log_file, as_json=True, add_name_if_missing=False)
                 assert isinstance(log_content, dict), "old split data logs no longer supported for verification"
-                assert "samples" in log_content and isinstance(log_content["samples"], list), \
-                    "unexpected dataset log content (bad 'samples' field, should be list)"
-                samples_old = log_content["samples"]
-                samples_new = dataset.samples if hasattr(dataset, "samples") and dataset.samples is not None \
-                    and len(dataset.samples) == len(dataset) else []
-                if len(samples_old) != len(samples_new):
-                    query_msg = "Old sample list for dataset '%s' mismatch with current sample list; proceed anyway?"
-                    answer = thelper.utils.query_yes_no(query_msg, bypass="n")
-                    if not answer:
-                        logger.error("sample list mismatch with previous run; user aborted")
-                        sys.exit(1)
-                    break
-                else:
-                    breaking = False
-                    for set_name, idxs in zip(["train_idxs", "valid_idxs", "test_idxs"],
-                                              [train_idxs[dataset_name], valid_idxs[dataset_name], test_idxs[dataset_name]]):
-                        # index values were paired in tuples earlier, 0=idx, 1=label --- we unpack in the miniloop below
-                        if not np.array_equal(np.sort(log_content[set_name]), np.sort([idx for idx, _ in idxs])):
-                            query_msg = f"Old indices list for dataset '{dataset_name}' mismatch with current indices" \
-                                        f"list ('{set_name}'); proceed anyway?"
-                            answer = thelper.utils.query_yes_no(query_msg, bypass="n")
-                            if not answer:
-                                logger.error("indices list mismatch with previous run; user aborted")
-                                sys.exit(1)
-                            breaking = True
-                            break
-                    if not breaking:
-                        for idx, (sample_new, sample_old) in enumerate(zip(samples_new, samples_old)):
-                            if str(sample_new) != sample_old:
-                                query_msg = f"Old sample #{idx} for dataset '{dataset_name}' mismatch with current #{idx};" \
-                                            f" proceed anyway?\n\told: {str(sample_old)}\n\tnew: {str(sample_new)}"
-                                answer = thelper.utils.query_yes_no(query_msg, bypass="n")
-                                if not answer:
-                                    logger.error("sample list mismatch with previous run; user aborted")
-                                    sys.exit(1)
-                                break
+                samples_old, samples_new = None, None
+                if "samples" in log_content:
+                    assert isinstance(log_content["samples"], list), \
+                        "unexpected dataset log content (bad 'samples' field, should be list)"
+                    samples_old = log_content["samples"]
+                    samples_new = dataset.samples if hasattr(dataset, "samples") and dataset.samples is not None \
+                        and len(dataset.samples) == len(dataset) else []
+                    if len(samples_old) != len(samples_new):
+                        query_msg = f"old sample list for dataset '{dataset_name}' mismatch with current list; proceed?"
+                        answer = thelper.utils.query_yes_no(query_msg, bypass="n")
+                        if not answer:
+                            logger.error("sample list mismatch with previous run; user aborted")
+                            sys.exit(1)
+                        break
+                for set_name, idxs in zip(["train_idxs", "valid_idxs", "test_idxs"],
+                                          [train_idxs[dataset_name], valid_idxs[dataset_name], test_idxs[dataset_name]]):
+                    # index values were paired in tuples earlier, 0=idx, 1=label --- we unpack in the miniloop below
+                    if not np.array_equal(np.sort(log_content[set_name]), np.sort([idx for idx, _ in idxs])):
+                        query_msg = f"Old indices list for dataset '{dataset_name}' mismatch with current indices" \
+                                    f"list ('{set_name}'); proceed anyway?"
+                        answer = thelper.utils.query_yes_no(query_msg, bypass="n")
+                        if not answer:
+                            logger.error("indices list mismatch with previous run; user aborted")
+                            sys.exit(1)
+                        break
+        printer = pprint.PrettyPrinter(indent=2)
+        log_sample_metadata = thelper.utils.get_key_def(["log_samples", "log_samples_metadata"], config, default=False)
         for dataset_name, dataset in datasets.items():
             dataset_log_file = os.path.join(data_logger_dir, dataset_name + ".log")
             samples = dataset.samples if hasattr(dataset, "samples") and dataset.samples is not None \
@@ -262,13 +254,13 @@ def create_loaders(config, save_dir=None):
                     "version": repover,
                     "dataset": str(dataset),
                 },
-                # @@@@ TODO: add util to truncate size of string in each member of samples below?
-                "samples": [str(sample) for sample in samples],
                 # index values were paired in tuples earlier, 0=idx, 1=label
-                "train_idxs": [idx for idx, _ in train_idxs[dataset_name]],
-                "valid_idxs": [idx for idx, _ in valid_idxs[dataset_name]],
-                "test_idxs": [idx for idx, _ in test_idxs[dataset_name]]
+                "train_idxs": [int(idx) for idx, _ in train_idxs[dataset_name]],
+                "valid_idxs": [int(idx) for idx, _ in valid_idxs[dataset_name]],
+                "test_idxs": [int(idx) for idx, _ in test_idxs[dataset_name]]
             }
+            if log_sample_metadata:
+                log_content["samples"] = [printer.pformat(sample) for sample in samples]
             # now, always overwrite, as it can get too big otherwise
             with open(dataset_log_file, "w") as fd:
                 json.dump(log_content, fd, indent=4, sort_keys=False)
@@ -431,40 +423,14 @@ def create_hdf5(archive_path, task, train_loader, valid_loader, test_loader, com
         fd.attrs["task"] = str(task)
         fd.attrs["config"] = str(config_backup)
         fd.attrs["compression"] = str(compression)
-        dtype = h5py.special_dtype(vlen=np.uint8)
         target_keys = task.keys
-
-        def create_dataset(name, max_len, array_template, compr_args):
-            if array_template.ndim > 1:
-                dset = fd.create_dataset(name, shape=(max_len,), maxshape=(max_len,), dtype=dtype)
-                dset.attrs["orig_dtype"] = str(array_template.dtype)
-                dset.attrs["orig_shape"] = array_template.shape[1:]  # removes batch dim
-            else:
-                assert thelper.utils.is_scalar(array_template[0])
-                if "type" in compr_args and compr_args["type"] != "none":
-                    raise AssertionError("cannot compress scalar elements")
-                if np.issubdtype(array_template.dtype, np.number):
-                    dset = fd.create_dataset(name, shape=(max_len,), maxshape=(max_len,), dtype=array_template.dtype)
-                else:
-                    dset = fd.create_dataset(name, shape=(max_len,), maxshape=(max_len,), dtype=dtype)
-                    dset.attrs["orig_dtype"] = str(array_template.dtype)
-                    dset.attrs["orig_shape"] = ()
-            return dset
-
-        def fill_dataset(dset, dset_idx, array_idx, array, compr, **compr_kwargs):
-            if array.ndim > 1:
-                dset[dset_idx] = np.frombuffer(thelper.utils.encode_data(array[array_idx], compr, **compr_kwargs), dtype=np.uint8)
-            elif not np.issubdtype(array.dtype, np.number):
-                sample = array[array_idx].tobytes() if np.issubdtype(array[array_idx].dtype, np.dtype(str).type) else array[array_idx]
-                dset[dset_idx] = np.frombuffer(sample, dtype=np.uint8)
-            else:
-                dset[dset_idx] = array[array_idx]
 
         def get_compr_args(key, config):
             config = thelper.utils.get_key_def(key, config, default={})
             compr_type = thelper.utils.get_key_def("type", config, default="none")
             encode_params = thelper.utils.get_key_def("encode_params", config, default={})
-            return compr_type, encode_params
+            flatten_arrays = thelper.utils.get_key_def("flatten", config, default=False)
+            return compr_type, encode_params, flatten_arrays
 
         for loader, group in [(train_loader, "train"), (valid_loader, "valid"), (test_loader, "test")]:
             if loader is None:
@@ -477,14 +443,27 @@ def create_hdf5(archive_path, task, train_loader, valid_loader, test_loader, com
                 for key in target_keys:
                     tensor = thelper.utils.to_numpy(batch[key])
                     if datasets[key] is None:
-                        datasets[key] = create_dataset(group + "/" + key, max_dataset_len, tensor, datasets_compr[key])
+                        datasets[key] = thelper.utils.create_hdf5_dataset(
+                            fd=fd,
+                            name=group + "/" + key,
+                            max_len=max_dataset_len,
+                            batch_like=tensor,
+                            compression=datasets_compr[key][:2],
+                            chunk_size=None,  # will auto-compute
+                            flatten=datasets_compr[key][2])
                     for idx in range(tensor.shape[0]):
-                        fill_dataset(datasets[key], datasets_len[key], idx, tensor, datasets_compr[key][0], **datasets_compr[key][1])
+                        thelper.utils.fill_hdf5_sample(
+                            dset=datasets[key],
+                            dset_idx=datasets_len[key],
+                            array_idx=idx,
+                            array=tensor,
+                            compression=datasets_compr[key][0],
+                            **datasets_compr[key][1])
                         datasets_len[key] += 1
             assert len(set(datasets_len.values())) == 1
             fd[group].attrs["count"] = datasets_len[task.input_key]
             for key in target_keys:
-                datasets[key].resize(size=(datasets_len[key],))
+                datasets[key].resize(size=(datasets_len[key], *datasets[key].attrs["orig_shape"],))
 
 
 def get_class_weights(label_map, stype="linear", maxw=float('inf'), minw=0.0, norm=True, invmax=False):

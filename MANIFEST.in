@@ -3,6 +3,7 @@ graft thelper
 graft ci
 graft tests
 graft configs
+graft scripts
 
 include .bumpversion.cfg
 include .coveragerc

@@ -180,7 +180,8 @@ class ClassifLogger(PredictionConsumer, ClassNamesHandler, FormatHandler):
         :class:`thelper.train.base.Trainer` and specified by ``thelper.typedefs.IterCallbackParams``.
         """
         assert len(kwargs) == 0, "unexpected extra arguments present in update call"
-        assert isinstance(task, thelper.tasks.Classification), "classif report only impl for classif tasks"
+        assert isinstance(task, thelper.tasks.Classification), "classif logger only impl for classif tasks"
+        assert not task.multi_label, "classif logger only impl for non-multi-label classif tasks"
         assert iter_idx is not None and max_iters is not None and iter_idx < max_iters, \
             "bad iteration indices given to update function"
         if self.score is None or self.score.size != max_iters:
@@ -218,6 +219,18 @@ class ClassifLogger(PredictionConsumer, ClassNamesHandler, FormatHandler):
     def report_text(self):
         # type: () -> Optional[AnyStr]
         return self.report_csv()
+
+    def report_json(self):
+        # type: () -> Optional[AnyStr]
+        csv = self.report_csv()
+        if csv is None:
+            return None
+        csv = csv.splitlines()
+        header, data = csv[0], csv[1:]
+        headers = header.split(",")
+        json_entries = [{k: float(v) if "score" in k else str(v)
+                         for k, v in zip(headers, line.split(","))} for line in data]
+        return json.dumps(json_entries, sort_keys=False, indent=4)
 
     def report_csv(self):
         # type: () -> Optional[AnyStr]
@@ -347,6 +360,7 @@ class ClassifReport(PredictionConsumer, ClassNamesHandler, FormatHandler):
         """
         assert len(kwargs) == 0, "unexpected extra arguments present in update call"
         assert isinstance(task, thelper.tasks.Classification), "classif report only impl for classif tasks"
+        assert not task.multi_label, "classif report only impl for non-multi-label classif tasks"
         assert iter_idx is not None and max_iters is not None and iter_idx < max_iters, \
             "bad iteration indices given to update function"
         if self.pred is None or self.pred.size != max_iters:
@@ -833,6 +847,7 @@ class ConfusionMatrix(PredictionConsumer, ClassNamesHandler):
         """
         assert len(kwargs) == 0, "unexpected extra arguments present in update call"
         assert isinstance(task, thelper.tasks.Classification), "confmat only impl for classif tasks"
+        assert not task.multi_label, "confmat only impl for non-multi-label classif tasks"
         assert iter_idx is not None and max_iters is not None and iter_idx < max_iters, \
             "bad iteration indices given to update function"
         if self.pred is None or self.pred.size != max_iters:
@@ -890,6 +905,7 @@ def create_consumers(config):
     assert isinstance(config, dict), "config should be provided as a dictionary"
     consumers = {}
     for name, consumer_config in config.items():
+        assert name != "loss", "metric name 'loss' is reserved"
         assert isinstance(consumer_config, dict), "consumer config should be provided as a dictionary"
         assert "type" in consumer_config and consumer_config["type"], "consumer config missing 'type' field"
         consumer_type = thelper.utils.import_class(consumer_config["type"])

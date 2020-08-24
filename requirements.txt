@@ -1,14 +1,17 @@
 gitpython
 h5py
+kornia
 lz4
 matplotlib
 numpy
 opencv-python
-Pillow
-pip
+orion
+pillow>=7.1
 pyyaml
 scikit-learn
 six
+tensorboardX
 torch
-torchvision
+# requirements at least needed for segmentation tasks
+torchvision>=0.6
 tqdm

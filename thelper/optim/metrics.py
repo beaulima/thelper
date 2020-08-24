@@ -204,12 +204,17 @@ class Accuracy(Metric):
             self.correct[curr_idx] = 0
             self.total[curr_idx] = 0
             return
-        assert pred.dim() == target.dim() + 1, "prediction/gt tensors dim mismatch (should be BxCx[...] and Bx[...])"
-        assert pred.shape[0] == target.shape[0], "prediction/gt tensors batch size mismatch"
-        assert pred.dim() <= 2 or pred.shape[2:] == target.shape[1:], "prediction/gt tensors array size mismatch"
-        top_k = pred.topk(self.top_k, dim=1)[1].view(pred.shape[0], self.top_k, -1).numpy()
-        true_k = target.view(target.shape[0], 1, -1).expand(-1, self.top_k, -1).numpy()
-        self.correct[curr_idx] = np.any(np.equal(top_k, true_k), axis=1).sum(dtype=np.int64)
+        if task is not None and isinstance(task, thelper.tasks.Classification) and task.multi_label:
+            assert pred.shape == target.shape, "prediction/gt tensors dim/shape mismatch"
+            assert self.top_k == 1, "unexpected top k value for multi-label accuracy eval"
+            self.correct[curr_idx] = np.equal((pred > 0.5).long(), target).cpu().numpy().sum(dtype=np.int64)
+        else:
+            assert pred.dim() == target.dim() + 1, "prediction/gt tensors dim mismatch (should be BxCx[...] and Bx[...])"
+            assert pred.shape[0] == target.shape[0], "prediction/gt tensors batch size mismatch"
+            assert pred.dim() <= 2 or pred.shape[2:] == target.shape[1:], "prediction/gt tensors array size mismatch"
+            top_k = pred.topk(self.top_k, dim=1)[1].view(pred.shape[0], self.top_k, -1).cpu().numpy()
+            true_k = target.view(target.shape[0], 1, -1).expand(-1, self.top_k, -1).cpu().numpy()
+            self.correct[curr_idx] = np.any(np.equal(top_k, true_k), axis=1).sum(dtype=np.int64)
         self.total[curr_idx] = target.numel()
 
     def eval(self):
@@ -911,6 +916,7 @@ class ROCCurve(Metric, ClassNamesHandler):
         """
         assert len(kwargs) == 0, "unexpected extra arguments present in update call"
         assert isinstance(task, thelper.tasks.Classification), "roc curve only impl for classif tasks"
+        assert not task.multi_label, "roc curve only impl for non-multi-label classif tasks"
         assert iter_idx is not None and max_iters is not None and iter_idx < max_iters, \
             "bad iteration indices given to metric update function"
         if self.score is None or self.score.size != max_iters:
@@ -1289,7 +1295,7 @@ class IntersectionOverUnion(Metric):
         unions: array holding the union areas for all input samples.
     """
 
-    def __init__(self, target_names=None, global_score=False, max_win_size=None):
+    def __init__(self, target_names=None, global_score=True, max_win_size=None):
         """Initializes metric attributes.
 
         Note that by default, if ``max_win_size`` is not provided here, the value given to ``max_iters`` on

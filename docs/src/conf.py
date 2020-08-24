@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath('../../'))
 project = 'thelper'
 copyright = '2018, Pierre-Luc St-Charles'
 author = 'Pierre-Luc St-Charles'
-version = release = '0.5.0-rc'
+version = release = '0.6.1'
 
 
 # -- General configuration ---------------------------------------------------
@@ -223,14 +223,19 @@ autodoc_mock_imports = [
     'argparse',
     'augmentor',
     'cv2',
+    'efficientnet_pytorch',
     'gdal',  # for geospatial tools
     'geojson',  # for geospatial tools
     'git',
     'h5py',
+    'hdf5plugin',
+    'kornia',
     'lz4',
     'matplotlib',
     'numpy',
     'ogr',  # for geospatial tools
+    'orion',
+    'orion.client',
     'osr',  # for geospatial tools
     'PIL',
     'PIL.Image',
