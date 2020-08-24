@@ -88,7 +88,7 @@ def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typin
                 all_same = False
     # Otherwise try to compose a compatible task
     if not all_same:
-        ref_task = ref_task
+        ref_task = None
         for task in tasks:
             if task is None:
                 # skip all undefined tasks
