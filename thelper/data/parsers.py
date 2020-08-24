@@ -453,13 +453,22 @@ class ImageFolderDataset(ClassificationDataset):
 class SuperResFolderDataset(Dataset):
     """Image folder dataset specialization interface for super-resolution tasks.
 
-    This specialization is used to parse simple image subfolders, and it essentially replaces the very
-    basic ``torchvision.datasets.ImageFolder`` interface with similar functionalities. It it used to provide
-    a proper task interface as well as path/class metadata in each loaded packet for metrics/logging output.
+    This specialization is used to parse simple image subfolders or to use a file text containing the path of each image.
+    It it used to provide a proper task interface as well as path/class metadata in each loaded packet for
+    metrics/logging output.  From the images use as label (highres_image), it will create low resolution images as
+    inputs for superres nn.
     """
 
-    def __init__(self, root, downscale_factor=2.0, rescale_lowres=True, center_crop=None, transforms=None,
-                 lowres_image_key="lowres_image", highres_image_key="highres_image", path_key="path", idx_key="idx", label_key="label"):
+    def __init__(self, root, downscale_factor=2.0,
+                 rescale_lowres=True,
+                 center_crop=None,
+                 transforms=None,
+                 lowres_image_key="lowres_image",
+                 highres_image_key="highres_image",
+                 path_key="path",
+                 idx_key="idx",
+                 label_key="label"):
+
         """Image folder dataset parser constructor."""
         if isinstance(downscale_factor, int):
             downscale_factor = float(downscale_factor)
@@ -474,33 +483,51 @@ class SuperResFolderDataset(Dataset):
                 raise AssertionError("invalid center crop size type")
         self.center_crop = center_crop
         self.root = root
-        if self.root is None or not os.path.isdir(self.root):
+        if self.root is None:
             raise AssertionError("invalid input data root '%s'" % self.root)
-        class_map = {}
-        for child in os.listdir(self.root):
-            if os.path.isdir(os.path.join(self.root, child)):
-                class_map[child] = []
-        if not class_map:
-            raise AssertionError("could not find any image folders at '%s'" % self.root)
-        image_exts = [".jpg", ".jpeg", ".bmp", ".png", ".ppm", ".pgm", ".tif"]
+        image_exts = [".jpg", ".jpeg", ".JPEG", ".bmp", ".png", ".ppm", ".pgm", ".tif"]
         self.lowres_image_key = lowres_image_key
         self.highres_image_key = highres_image_key
         self.path_key = path_key
         self.idx_key = idx_key
         self.label_key = label_key  # to provide folder names
-        samples = []
-        for class_name in class_map:
-            class_folder = os.path.join(self.root, class_name)
-            for folder, subfolder, files in os.walk(class_folder):
-                for file in files:
+        if os.path.isdir(self.root):
+            class_map = {}
+            for child in os.listdir(self.root):
+                if os.path.isdir(os.path.join(self.root, child)):
+                    class_map[child] = 0
+            if not class_map:
+                raise AssertionError("could not find any image folders at '%s'" % self.root)
+            samples = []
+            for class_name in class_map:
+                class_folder = os.path.join(self.root, class_name)
+                for folder, subfolder, files in os.walk(class_folder):
+                    for file in files:
+                        ext = os.path.splitext(file)[1].lower()
+                        if ext in image_exts:
+                            class_map[class_name]=len(samples)
+                            samples.append({
+                                self.path_key: os.path.join(folder, file),
+                                self.label_key: class_name
+                            })
+            class_map = {k: v for k, v in class_map.items() if len(v) > 0}
+        elif os.path.isfile(self.root):
+            class_map = {}
+            samples = []
+            with open(self.root, 'r') as fp:
+                for file in fp.readlines():
+                    file = file.strip()
+                    if not os.path.exists(file):
+                        raise AssertionError(f"could not locate any subdir in '{file}' with images to load" )
                     ext = os.path.splitext(file)[1].lower()
                     if ext in image_exts:
-                        class_map[class_name].append(len(samples))
+                        class_name = os.path.basename(os.path.dirname(file))
                         samples.append({
-                            self.path_key: os.path.join(folder, file),
+                            self.path_key: file,
                             self.label_key: class_name
                         })
-        class_map = {k: v for k, v in class_map.items() if len(v) > 0}
+                        class_map[class_name]=len(samples)
+
         if not class_map:
             raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
         meta_keys = [self.path_key, self.idx_key, self.label_key]
