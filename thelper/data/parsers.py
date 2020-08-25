@@ -117,7 +117,7 @@ class Dataset(torch.utils.data.Dataset):
     def transforms(self, transforms):
         """Sets the transformation operations to apply to this dataset's loaded samples."""
         assert transforms is None or hasattr(transforms, "__call__") or \
-            (isinstance(transforms, list) and all([hasattr(t, "__call__") for t in transforms])), \
+               (isinstance(transforms, list) and all([hasattr(t, "__call__") for t in transforms])), \
             "transformations should be callable (or list of callables)"
         self._transforms = transforms
 
@@ -218,7 +218,8 @@ class HDF5Dataset(Dataset):
             compr_config = thelper.utils.get_key_def(key, compr_config, default={})
             compr_type = thelper.utils.get_key_def("type", compr_config, default="none")
             compr_kwargs = thelper.utils.get_key_def(["decode_params", "decode_kwargs"], compr_config, default={})
-            self.target_args[key] = {"dset": dset, "dtype": dtype, "shape": shape, "compr_type": compr_type, "compr_kwargs": compr_kwargs}
+            self.target_args[key] = {"dset": dset, "dtype": dtype, "shape": shape, "compr_type": compr_type,
+                                     "compr_kwargs": compr_kwargs}
 
     def __getitem__(self, idx):
         """Returns the data sample (a dictionary) for a specific (0-based) index."""
@@ -291,7 +292,8 @@ class SegmentationDataset(Dataset):
         | :class:`thelper.data.parsers.Dataset`
     """
 
-    def __init__(self, class_names, input_key, label_map_key, meta_keys=None, dontcare=None, transforms=None, deepcopy=False):
+    def __init__(self, class_names, input_key, label_map_key, meta_keys=None, dontcare=None, transforms=None,
+                 deepcopy=False):
         """Segmentation dataset parser constructor.
 
         This constructor receives all extra arguments necessary to build a segmentation task object.
@@ -309,7 +311,8 @@ class SegmentationDataset(Dataset):
                 or buffer that might cause problems in multi-threaded data loaders.
         """
         super(SegmentationDataset, self).__init__(transforms=transforms, deepcopy=deepcopy)
-        self.task = thelper.tasks.Segmentation(class_names, input_key, label_map_key, meta_keys=meta_keys, dontcare=dontcare)
+        self.task = thelper.tasks.Segmentation(class_names, input_key, label_map_key, meta_keys=meta_keys,
+                                               dontcare=dontcare)
 
     @abstractmethod
     def __getitem__(self, idx):
@@ -450,6 +453,60 @@ class ImageFolderDataset(ClassificationDataset):
         return sample
 
 
+class SyntheticDataset(Dataset):
+
+    def __init__(self, patch_size=(64, 64), nchannels=1, max_samples_number=1024,
+                 transforms=None,
+                 input_key="copy",
+                 target_key="original",
+                 path_key="path",
+                 idx_key="idx",
+                 label_key="label"):
+
+        self.patch_size = patch_size
+        self.nchannels = nchannels
+        self.max_samples_number = max_samples_number
+
+        self.input_key = input_key
+        self.target_key = target_key
+        self.path_key = path_key
+        self.idx_key = idx_key
+        self.label_key = label_key
+
+        meta_keys = [self.path_key, self.idx_key, self.label_key]
+        super(SyntheticDataset, self).__init__(transforms=transforms)
+        self.task = thelper.tasks.ImageToImageRegression(input_key=self.input_key, target_key=self.target_key,
+                                                         meta_keys=meta_keys)
+        samples = []
+        for k in range(max_samples_number):
+            samples.append({
+                self.path_key: "dummy",
+                self.label_key: "no_class"
+            })
+        self.samples = samples
+
+        toto = 0
+
+    def __getitem__(self, idx):
+
+        sample = self.samples[idx]
+
+        original_img = np.zeros((self.patch_size[0], self.patch_size[1], self.nchannels), dtype="float32")
+        copy_imag = np.zeros_like(original_img) + 1.0
+
+        sample = {
+            self.input_key: original_img,
+            self.target_key: copy_imag,
+            self.idx_key: idx,
+            **sample
+        }
+
+        if self.transforms:
+            sample = self.transforms(sample)
+
+        return sample
+
+
 class ImageCopyDataset(Dataset):
     """Image folder dataset specialization interface for super-resolution tasks.
 
@@ -494,7 +551,7 @@ class ImageCopyDataset(Dataset):
                     for file in files:
                         ext = os.path.splitext(file)[1].lower()
                         if ext in image_exts:
-                            class_map[class_name]=len(samples)
+                            class_map[class_name] = len(samples)
                             samples.append({
                                 self.path_key: os.path.join(folder, file),
                                 self.label_key: class_name
@@ -505,7 +562,7 @@ class ImageCopyDataset(Dataset):
                 for file in fp.readlines():
                     file = file.strip()
                     if not os.path.exists(file):
-                        raise AssertionError(f"could not locate any subdir in '{file}' with images to load" )
+                        raise AssertionError(f"could not locate any subdir in '{file}' with images to load")
                     ext = os.path.splitext(file)[1].lower()
                     if ext in image_exts:
                         class_name = os.path.basename(os.path.dirname(file))
@@ -513,13 +570,14 @@ class ImageCopyDataset(Dataset):
                             self.path_key: file,
                             self.label_key: class_name
                         })
-                        class_map[class_name]=len(samples)
+                        class_map[class_name] = len(samples)
 
         if not class_map:
             raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
         meta_keys = [self.path_key, self.idx_key, self.label_key]
         super(ImageCopyDataset, self).__init__(transforms=transforms)
-        self.task = thelper.tasks.ImageToImageRegression(input_key=self.input_key, target_key=self.target_key, meta_keys=meta_keys)
+        self.task = thelper.tasks.ImageToImageRegression(input_key=self.input_key, target_key=self.target_key,
+                                                         meta_keys=meta_keys)
         self.samples = samples
 
     def __getitem__(self, idx):
@@ -549,6 +607,7 @@ class ImageCopyDataset(Dataset):
             sample = self.transforms(sample)
 
         return sample
+
 
 class SuperResDataset(Dataset):
     """Image folder dataset specialization interface for super-resolution tasks.
@@ -605,7 +664,7 @@ class SuperResDataset(Dataset):
                     for file in files:
                         ext = os.path.splitext(file)[1].lower()
                         if ext in image_exts:
-                            class_map[class_name]=len(samples)
+                            class_map[class_name] = len(samples)
                             samples.append({
                                 self.path_key: os.path.join(folder, file),
                                 self.label_key: class_name
@@ -618,7 +677,7 @@ class SuperResDataset(Dataset):
                 for file in fp.readlines():
                     file = file.strip()
                     if not os.path.exists(file):
-                        raise AssertionError(f"could not locate any subdir in '{file}' with images to load" )
+                        raise AssertionError(f"could not locate any subdir in '{file}' with images to load")
                     ext = os.path.splitext(file)[1].lower()
                     if ext in image_exts:
                         class_name = os.path.basename(os.path.dirname(file))
@@ -626,13 +685,14 @@ class SuperResDataset(Dataset):
                             self.path_key: file,
                             self.label_key: class_name
                         })
-                        class_map[class_name]=len(samples)
+                        class_map[class_name] = len(samples)
 
         if not class_map:
             raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
         meta_keys = [self.path_key, self.idx_key, self.label_key]
         super(SuperResDataset, self).__init__(transforms=transforms)
-        self.task = thelper.tasks.SuperResolution(input_key=self.lowres_image_key, target_key=self.highres_image_key, meta_keys=meta_keys)
+        self.task = thelper.tasks.SuperResolution(input_key=self.lowres_image_key, target_key=self.highres_image_key,
+                                                  meta_keys=meta_keys)
         self.samples = samples
 
     def __getitem__(self, idx):

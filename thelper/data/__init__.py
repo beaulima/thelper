@@ -26,6 +26,7 @@ from thelper.data.parsers import ImageFolderDataset  # noqa: F401
 from thelper.data.parsers import SegmentationDataset  # noqa: F401
 from thelper.data.parsers import SuperResDataset  # noqa: F401
 from thelper.data.parsers import ImageCopyDataset # noqa: F401
+from thelper.data.parsers import SyntheticDataset # noqa: F401
 from thelper.data.pascalvoc import PASCALVOC  # noqa: F401
 from thelper.data.samplers import SubsetRandomSampler  # noqa: F401
 from thelper.data.samplers import SubsetSequentialSampler  # noqa: F401
