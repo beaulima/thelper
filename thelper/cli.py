@@ -244,8 +244,8 @@ def annotate_data(config, save_dir):
     assert session_name is not None, "config missing 'name' field required for output directory"
     logger.info("creating annotation session '%s'..." % session_name)
     thelper.utils.setup_globals(config)
-    save_dir = thelper.utils.get_save_dir(save_dir, session_name, config)
-    logger.debug("session will be saved at '%s'" % os.path.abspath(save_dir).replace("\\", "/"))
+    save_dir = pth(thelper.utils.get_save_dir(save_dir, session_name, config))
+    logger.debug("session will be saved at '%s'" % save_dir.abspath())
     datasets, _ = thelper.data.create_parsers(config)
     annotator = thelper.gui.create_annotator(session_name, save_dir, config, datasets)
     logger.debug("starting annotator")
