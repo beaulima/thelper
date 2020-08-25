@@ -9,6 +9,7 @@ import logging
 import thelper.optim.eval  # noqa: F401
 import thelper.optim.metrics  # noqa: F401
 import thelper.optim.schedulers  # noqa: F401
+import thelper.optim.optimizers  # noqa: F401
 import thelper.optim.utils  # noqa: F401
 from thelper.optim.eval import compute_average_precision  # noqa: F401
 from thelper.optim.eval import compute_bbox_iou  # noqa: F401
