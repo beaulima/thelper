@@ -19,6 +19,7 @@ from thelper.transforms.operations import NormalizeMinMax  # noqa: F401
 from thelper.transforms.operations import NormalizeZeroMeanUnitVar  # noqa: F401
 from thelper.transforms.operations import NoTransform  # noqa: F401
 from thelper.transforms.operations import RandomResizedCrop  # noqa: F401
+from thelper.transforms.operations import RandomCrop  # noqa: F401
 from thelper.transforms.operations import RandomShift  # noqa: F401
 from thelper.transforms.operations import Resize  # noqa: F401
 from thelper.transforms.operations import Tile  # noqa: F401

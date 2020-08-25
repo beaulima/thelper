@@ -21,7 +21,7 @@ import cv2 as cv
 import numpy as np
 import PIL.Image
 import torch
-import torchvision.transforms.functional
+import torchvision.transforms.functional as F
 import torchvision.utils
 
 import thelper.utils
@@ -85,7 +85,8 @@ class ToNumpy:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(reorder_bgr={self.reorder_bgr})"
+               f"(reorder_bgr={self.reorder_bgr})"
+
 
 class CopyTo:
     """Copy the sample.  Use in conjonction with the output_key param
@@ -117,7 +118,7 @@ class CopyTo:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"()"
+               f"()"
 
 
 class CenterCrop:
@@ -184,7 +185,131 @@ class CenterCrop:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(size={self.size}, bordertype={self.bordertype}, borderval={self.borderval})"
+               f"(size={self.size}, bordertype={self.bordertype}, borderval={self.borderval})"
+
+
+class RandomCrop:
+    """Returns crop of a randomly selected image region.
+
+    Attributes:
+        output_size: size of the output crop, provided as a single element (``edge_size``) or as a
+            two-element tuple or list (``[width, height]``). If integer values are used, the size is
+            assumed to be absolute. If floating point values are used (i.e. in [0,1]), the output
+            size is assumed to be relative to the original image size, and will be determined at
+            execution time for each sample. If set to ``None``, the crop will not be resized.
+    """
+
+    def __init__(self, size, pad_if_needed=True, fill=0, padding_mode="constant"):
+        """Validates and initializes crop parameters.
+
+        Args:
+            size: size of the output crop, provided as a single element (``edge_size``) or as a
+                two-element tuple or list (``[width, height]``). If integer values are used, the size is
+                assumed to be absolute. If floating point values are used (i.e. in [0,1]), the output
+                size is assumed to be relative to the original image size, and will be determined at
+                execution time for each sample. If set to ``None``, the crop will not be resized.
+            pad_if_needed (boolean): It will pad the image if smaller than the
+                desired size to avoid raising an exception. Since cropping is done
+                after padding.
+                Default is True.
+            fill: sequence or scalar, optional
+                Used in ‘constant’. The values to set the padded values for each axis.
+                ((before_1, after_1), ... (before_N, after_N)) unique pad constants for each axis.
+                ((before, after),) yields same before and after constants for each axis.
+                (constant,) or constant is a shortcut for before = after = constant for all axes.
+                Default is 0.
+            padding_mode: str or function, optional
+                    One of the following string values or a user supplied function.
+                    ‘constant’ (default) Pads with a constant value.
+                    ‘edge’ Pads with the edge values of array.
+                    ‘linear_ramp’ Pads with the linear ramp between end_value and the array edge value.
+                    ‘maximum’ Pads with the maximum value of all or part of the vector along each axis.
+                    ‘mean’ Pads with the mean value of all or part of the vector along each axis.
+                    ‘median’ Pads with the median value of all or part of the vector along each axis.
+                    ‘minimum’ Pads with the minimum value of all or part of the vector along each axis.
+                    ‘reflect’ Pads with the reflection of the vector mirrored on the first and last values of the vector
+                    along each axis.
+                    ‘symmetric’ Pads with the reflection of the vector mirrored along the edge of the array.
+                    ‘wrap’ Pads with the wrap of the vector along the axis. The first values are used to pad the end and
+                    the end values are used to pad the beginning.
+                    ‘empty’ Pads with undefined values. (numpy 1.17)
+        """
+
+        self.pad_if_needed = pad_if_needed
+        self.fill = fill
+        self.padding_mode = padding_mode
+        if size is None or isinstance(size, (tuple, list)):
+            if size is not None:
+                assert len(size) == 2, "expected output size to be two-element list or tuple, or single scalar"
+                assert all([isinstance(s, int) for s in size]) or all(
+                    [isinstance(s, float) for s in size]), \
+                    "expected output size pair elements to be the same type (int or float)"
+            self.size = size
+        elif isinstance(size, (int, float)):
+            self.size = (size, size)
+        else:
+            raise TypeError("unexpected output size type (need tuple/list/int/float)")
+        if self.size is not None:
+            for s in self.size:
+                assert ((isinstance(s, float) and 0 < s <= 1) or (isinstance(s, int) and s > 0)), \
+                    f"invalid output size value ({str(s)})"
+
+    def __call__(self, sample):
+        """Extracts and returns a random (resized) crop from the provided image.
+
+        Args:
+            sample: the image to generate the crop from. If given as a 2-element list, it is assumed to
+                contain both the image.
+
+        Returns:
+            The randomly crop.
+        """
+        assert isinstance(sample, (PIL.Image.Image, np.ndarray)), \
+            f"sample type should be np.ndarray or PIL image (got {type(sample)})"
+        if isinstance(sample, PIL.Image.Image):
+            sample = np.asarray(sample)
+        assert 2 <= sample.ndim <= 3, "bad input dimensions; must be 2-d, or 3-d (with channels)"
+
+        h = sample.shape[0]
+        w = sample.shape[1]
+        sh = self.size[1]
+        sw = self.size[0]
+
+        # pad the height if needed
+        if self.pad_if_needed and h < sh:
+            pad_size = (sh - h) // 2 + 1
+            if sample.ndim == 3:
+                sample = np.pad(sample, ((pad_size, pad_size), (0, 0), (0, 0)), constant_values=self.fill,
+                                mode=self.padding_mode)
+            else:
+                sample = np.pad(sample, ((pad_size, pad_size), (0, 0)), constant_values=self.fill,
+                                mode=self.padding_mode)
+
+        # pad the height if needed
+        if self.pad_if_needed and w < sw:
+            pad_size = (sw - w) // 2 + 1
+            if sample.ndim == 3:
+                sample = np.pad(sample, ((0, 0), (pad_size, pad_size), (0, 0)), constant_values=self.fill,
+                                mode=self.padding_mode)
+            else:
+                sample = np.pad(sample, ((0, 0), (pad_size, pad_size)), constant_values=self.fill,
+                                mode=self.padding_mode)
+
+        # reassign size in case of padding
+        h = sample.shape[0]
+        w = sample.shape[1]
+
+        # print(sample.shape, w - sw, h - sh )
+        # compute offsets
+        x0 = np.random.randint(low=0, high=w - sw)
+        y0 = np.random.randint(low=0, high=h - sh)
+
+        sample = sample[y0:y0 + sh, x0:x0 + sw]
+
+        # check size in case
+        assert sample.shape[0] == sh and sample.shape[1] == sw
+
+        return sample
 
 
 class RandomResizedCrop:
@@ -246,7 +371,8 @@ class RandomResizedCrop:
         if output_size is None or isinstance(output_size, (tuple, list)):
             if output_size is not None:
                 assert len(output_size) == 2, "expected output size to be two-element list or tuple, or single scalar"
-                assert all([isinstance(s, int) for s in output_size]) or all([isinstance(s, float) for s in output_size]), \
+                assert all([isinstance(s, int) for s in output_size]) or all(
+                    [isinstance(s, float) for s in output_size]), \
                     "expected output size pair elements to be the same type (int or float)"
             self.output_size = output_size
         elif isinstance(output_size, (int, float)):
@@ -270,7 +396,7 @@ class RandomResizedCrop:
                 raise TypeError("invalid aspect ratio, expected 2-element tuple/list or single float")
             self.input_size = ((min(input_size), min(input_size)), (max(input_size), max(input_size)))
         elif all([isinstance(s, tuple) and len(s) == 2 for s in input_size]) or \
-                all([isinstance(s, list) and len(s) == 2 for s in input_size]):
+            all([isinstance(s, list) and len(s) == 2 for s in input_size]):
             assert ratio is None or (isinstance(ratio, (tuple, list)) and len(ratio) == 0), \
                 "cannot specify input sizes in two-element tuples/lists and also provide aspect ratios"
             for t in input_size:
@@ -281,10 +407,11 @@ class RandomResizedCrop:
                                (max(input_size[0][0], input_size[1][0]), max(input_size[0][1], input_size[1][1])))
             self.ratio = None  # ignored since input_size contains all necessary info
         else:
-            raise TypeError("expected input size to be two-elem list/tuple of int/float or two-element list/tuple of int/float")
+            raise TypeError(
+                "expected input size to be two-elem list/tuple of int/float or two-element list/tuple of int/float")
         for t in self.input_size:
             assert ((isinstance(t, float) and 0 < s <= 1) or (isinstance(t, int) and s > 0)) or \
-                all([((isinstance(s, float) and 0 < s <= 1) or (isinstance(s, int) and s > 0)) for s in t]), \
+                   all([((isinstance(s, float) and 0 < s <= 1) or (isinstance(s, int) and s > 0)) for s in t]), \
                 "invalid input size value"
         assert 0 <= probability <= 1, "invalid probability value (should be in [0,1]"
         self.probability = probability
@@ -348,11 +475,14 @@ class RandomResizedCrop:
             else:
                 raise RuntimeError("unhandled crop strategy")
             if target_width <= image_width and target_height <= image_height:
-                target_col = np.random.randint(min(0, image_width - target_width), max(0, image_width - target_width) + 1)
-                target_row = np.random.randint(min(0, image_height - target_height), max(0, image_height - target_height) + 1)
+                target_col = np.random.randint(min(0, image_width - target_width),
+                                               max(0, image_width - target_width) + 1)
+                target_row = np.random.randint(min(0, image_height - target_height),
+                                               max(0, image_height - target_height) + 1)
                 if roi is None:
                     break
-                roi = thelper.draw.safe_crop(roi, (target_col, target_row), (target_col + target_width, target_row + target_height))
+                roi = thelper.draw.safe_crop(roi, (target_col, target_row),
+                                             (target_col + target_width, target_row + target_height))
                 if np.count_nonzero(roi) >= target_width * target_height * self.min_roi_iou:
                     break
         if target_row is None or target_col is None:
@@ -363,7 +493,8 @@ class RandomResizedCrop:
             if roi is not None and not self.warned_no_crop_found_with_roi:
                 logger.warning("random resized crop failing to find proper ROI matches after max attempt count")
                 self.warned_no_crop_found_with_roi = True
-        crop = thelper.draw.safe_crop(image, (target_col, target_row), (target_col + target_width, target_row + target_height))
+        crop = thelper.draw.safe_crop(image, (target_col, target_row),
+                                      (target_col + target_width, target_row + target_height))
         if self.output_size is None:
             return crop
         elif isinstance(self.output_size[0], float):
@@ -382,9 +513,9 @@ class RandomResizedCrop:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(output_size={self.output_size}, input_size={self.input_size}, ratio={self.ratio}, " + \
-            f"probability={self.probability}, random_attempts={self.random_attempts}, " + \
-            f"min_roi_iou={self.min_roi_iou}, flags={self.flags})"
+               f"(output_size={self.output_size}, input_size={self.input_size}, ratio={self.ratio}, " + \
+               f"probability={self.probability}, random_attempts={self.random_attempts}, " + \
+               f"min_roi_iou={self.min_roi_iou}, flags={self.flags})"
 
     def set_seed(self, seed):
         """Sets the internal seed to use for stochastic ops."""
@@ -475,7 +606,7 @@ class Resize:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(dsize={self.dsize}, fx={self.fx}, fy={self.fy}, interp={self.interp}, buffer={self.buffer})"
+               f"(dsize={self.dsize}, fx={self.fx}, fy={self.fy}, interp={self.interp}, buffer={self.buffer})"
 
 
 class Affine:
@@ -566,8 +697,8 @@ class Affine:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(transf={self.transf}, out_size={self.out_size}, flags={self.flags}, " + \
-            f"border_mode={self.border_mode}, border_val={self.border_val})"
+               f"(transf={self.transf}, out_size={self.out_size}, flags={self.flags}, " + \
+               f"border_mode={self.border_mode}, border_val={self.border_val})"
 
 
 class RandomShift:
@@ -642,7 +773,8 @@ class RandomShift:
         x_shift = np.random.uniform(self.min[0], self.max[0])
         y_shift = np.random.uniform(self.min[1], self.max[1])
         transf = np.float32([[1, 0, x_shift], [0, 1, y_shift]])
-        return cv.warpAffine(sample, transf, dsize=out_size, flags=self.flags, borderMode=self.border_mode, borderValue=self.border_val)
+        return cv.warpAffine(sample, transf, dsize=out_size, flags=self.flags, borderMode=self.border_mode,
+                             borderValue=self.border_val)
 
     def invert(self, sample):
         """Specifies that this operation cannot be inverted, as it is stochastic, and data loss occurs during transformation."""
@@ -651,8 +783,8 @@ class RandomShift:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(min={self.min}, max={self.max}, probability={self.probability}, flags={self.flags}, " + \
-            f"border_mode={self.border_mode}, border_val={self.border_val})"
+               f"(min={self.min}, max={self.max}, probability={self.probability}, flags={self.flags}, " + \
+               f"border_mode={self.border_mode}, border_val={self.border_val})"
 
     def set_seed(self, seed):
         """Sets the internal seed to use for stochastic ops."""
@@ -900,7 +1032,7 @@ class Duplicator(NoTransform):
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(count={self.count}, deepcopy={self.deepcopy})"
+               f"(count={self.count}, deepcopy={self.deepcopy})"
 
 
 class Tile:
@@ -929,7 +1061,8 @@ class Tile:
             ``cv2.copyMakeBorder`` for more information.
     """
 
-    def __init__(self, tile_size, tile_overlap=0.0, min_mask_iou=1.0, offset_overlap=False, bordertype=cv.BORDER_CONSTANT, borderval=0):
+    def __init__(self, tile_size, tile_overlap=0.0, min_mask_iou=1.0, offset_overlap=False,
+                 bordertype=cv.BORDER_CONSTANT, borderval=0):
         """Validates and initializes tiling parameters.
 
         Args:
@@ -1062,8 +1195,8 @@ class Tile:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(tile_size={self.tile_size}, tile_overlap={self.tile_overlap}, min_mask_iou={self.min_mask_iou}, " + \
-            f"offset_overlap={self.offset_overlap}, bordertype={self.bordertype}, borderval={self.borderval})"
+               f"(tile_size={self.tile_size}, tile_overlap={self.tile_overlap}, min_mask_iou={self.min_mask_iou}, " + \
+               f"offset_overlap={self.offset_overlap}, bordertype={self.bordertype}, borderval={self.borderval})"
 
 
 class NormalizeZeroMeanUnitVar:
@@ -1110,9 +1243,7 @@ class NormalizeZeroMeanUnitVar:
         if isinstance(sample, np.ndarray):
             return ((sample - self.mean) / self.std).astype(self.out_type)
         elif isinstance(sample, torch.Tensor):
-            out = torchvision.transforms.functional.normalize(sample,
-                                                              torch.from_numpy(self.mean),
-                                                              torch.from_numpy(self.std))
+            out = F.normalize(sample, torch.from_numpy(self.mean), torch.from_numpy(self.std))
             assert self.out_type != np.float32, "missing impl for non-float torch normalize output"
             return out.float()
         else:
@@ -1127,7 +1258,7 @@ class NormalizeZeroMeanUnitVar:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(mean={self.mean}, std={self.std}, out_type={self.out_type})"
+               f"(mean={self.mean}, std={self.std}, out_type={self.out_type})"
 
 
 class NormalizeMinMax:
@@ -1191,4 +1322,4 @@ class NormalizeMinMax:
     def __repr__(self):
         """Provides print-friendly output for class attributes."""
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
-            f"(min={self.min}, max={self.max}, out_type={self.out_type})"
+               f"(min={self.min}, max={self.max}, out_type={self.out_type})"
