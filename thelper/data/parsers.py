@@ -452,68 +452,13 @@ class ImageFolderDataset(ClassificationDataset):
             sample = self.transforms(sample)
         return sample
 
-
-class SyntheticDataset(Dataset):
-
-    def __init__(self, patch_size=(64, 64), nchannels=1, max_samples_number=1024,
-                 transforms=None,
-                 input_key="copy",
-                 target_key="original",
-                 path_key="path",
-                 idx_key="idx",
-                 label_key="label"):
-
-        self.patch_size = patch_size
-        self.nchannels = nchannels
-        self.max_samples_number = max_samples_number
-
-        self.input_key = input_key
-        self.target_key = target_key
-        self.path_key = path_key
-        self.idx_key = idx_key
-        self.label_key = label_key
-
-        meta_keys = [self.path_key, self.idx_key, self.label_key]
-        super(SyntheticDataset, self).__init__(transforms=transforms)
-        self.task = thelper.tasks.ImageToImageRegression(input_key=self.input_key, target_key=self.target_key,
-                                                         meta_keys=meta_keys)
-        samples = []
-        for k in range(max_samples_number):
-            samples.append({
-                self.path_key: "dummy",
-                self.label_key: "no_class"
-            })
-        self.samples = samples
-
-        toto = 0
-
-    def __getitem__(self, idx):
-
-        sample = self.samples[idx]
-
-        original_img = np.zeros((self.patch_size[0], self.patch_size[1], self.nchannels), dtype="float32")
-        copy_imag = np.zeros_like(original_img) + 1.0
-
-        sample = {
-            self.input_key: original_img,
-            self.target_key: copy_imag,
-            self.idx_key: idx,
-            **sample
-        }
-
-        if self.transforms:
-            sample = self.transforms(sample)
-
-        return sample
-
-
 class ImageCopyDataset(Dataset):
-    """Image folder dataset specialization interface for super-resolution tasks.
+    """Image folder dataset specialization interface for image to image regression task tasks.
 
     This specialization is used to parse simple image subfolders or to use a file text containing the path of each image.
     It it used to provide a proper task interface as well as path/class metadata in each loaded packet for
-    metrics/logging output.  From the images use as label (highres_image), it will create low resolution images as
-    inputs for superres nn.
+    metrics/logging output.  This class is use ine conjunction with the Transform CopyTo (see the superresolution
+    example:
     """
 
     def __init__(self, root,
