@@ -228,7 +228,8 @@ def draw_images(images,               # type: thelper.typedefs.OneOrManyArrayTyp
                 grid_size_x=None,     # type: Optional[int]
                 grid_size_y=None,     # type: Optional[int]
                 caption_opts=None,
-                window_name=None,     # type: Optional[str]
+                window_name=None,     # type: Optional[str],
+                **kwargs,     # type: Any
                 ):                    # type: (...) -> thelper.typedefs.DrawingType
     """Draws a set of images with optional captions."""
     nb_imgs = len(images) if isinstance(images, list) else images.shape[0]
@@ -324,6 +325,9 @@ def draw_predicts(images, preds=None, targets=None, swap_channels=False, redraw=
         if targets.shape[0] != nb_imgs:
             raise AssertionError("images/targets count mismatch")
         targets = targets.numpy()
+        channels = thelper.utils.get_key_def("channels", kwargs, None)
+        if channels is not None and isinstance(channels, list):
+            targets = targets[:, channels]
         if swap_channels:
             if not targets.ndim == 4:
                 raise AssertionError("unexpected swap for targets tensor that is not 4-dim")
@@ -351,6 +355,9 @@ def draw_predicts(images, preds=None, targets=None, swap_channels=False, redraw=
         if preds.shape[0] != nb_imgs:
             raise AssertionError("images/preds count mismatch")
         preds = preds.numpy()
+        channels = thelper.utils.get_key_def("channels", kwargs, None)
+        if channels is not None and isinstance(channels, list):
+            preds = preds[:, channels]
         if swap_channels:
             if not preds.ndim == 4:
                 raise AssertionError("unexpected swap for targets tensor that is not 4-dim")
@@ -515,6 +522,10 @@ def draw(task, input, pred=None, target=None, block=False, ch_transpose=True, fl
     if not isinstance(input, torch.Tensor) or input.dim() != 4:
         raise AssertionError("expected input images to be in 4-d tensor format (BxCxHxW or BxHxWxC)")
     input = input.numpy().copy()
+    channels = thelper.utils.get_key_def("channels", kwargs,None)
+    if channels is not None and isinstance(channels, list):
+        input = input[:, channels]
+
     if ch_transpose:
         input = np.transpose(input, (0, 2, 3, 1))  # BxCxHxW to BxHxWxC
     if flip_bgr:
