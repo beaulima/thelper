@@ -291,10 +291,10 @@ def split_data(config, save_dir):
     archive_name = thelper.utils.get_key_def("archive_name", split_config, default=(session_name + ".hdf5"))
     logger.info("creating new splitting session '%s'..." % session_name)
     thelper.utils.setup_globals(config)
-    save_dir = thelper.utils.get_save_dir(save_dir, session_name, config)
-    logger.debug("session will be saved at '%s'" % os.path.abspath(save_dir).replace("\\", "/"))
+    save_dir = pth(thelper.utils.get_save_dir(save_dir, session_name, config))
+    logger.debug("session will be saved at '%s'" % save_dir.abspath())
     task, train_loader, valid_loader, test_loader = thelper.data.create_loaders(config, save_dir)
-    archive_path = os.path.join(save_dir, archive_name)
+    archive_path = save_dir.joinpath(archive_name)
     thelper.data.create_hdf5(archive_path, task, train_loader, valid_loader, test_loader, compression, config)
     logger.debug("all done")
 
