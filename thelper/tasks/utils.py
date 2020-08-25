@@ -7,6 +7,7 @@ and the base interface used to define new tasks.
 import logging
 import re
 import typing
+import copy
 
 import thelper.typedefs
 import thelper.utils
@@ -82,7 +83,7 @@ def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typin
     all_same = True
     # Check all task are the same and select one of them as global task
     for ref_task1 in tasks:
-        ref_task = ref_task1
+        ref_task = copy.deepcopy(ref_task1)
         for ref_task2 in tasks:
             if type(ref_task1) != type(ref_task2):
                 all_same = False
