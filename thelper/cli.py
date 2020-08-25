@@ -12,6 +12,7 @@ import argparse
 import json
 import logging
 import os
+from pathlib import Path as pth
 from typing import Any, Union
 
 import torch
@@ -44,8 +45,8 @@ def create_session(config, save_dir,backup_ext='.json'):
     assert session_name is not None, "config missing 'name' field required for output directory"
     logger.info("creating new training session '%s'..." % session_name)
     thelper.utils.setup_globals(config)
-    save_dir = thelper.utils.get_save_dir(save_dir, session_name, config, backup_ext=backup_ext)
-    logger.debug("session will be saved at '%s'" % os.path.abspath(save_dir).replace("\\", "/"))
+    save_dir = pth(thelper.utils.get_save_dir(save_dir, session_name, config, backup_ext=backup_ext))
+    logger.debug("session will be saved at '%s'" % save_dir.absolute())
     task, train_loader, valid_loader, test_loader = thelper.data.create_loaders(config, save_dir)
     model = thelper.nn.create_model(config, task, save_dir=save_dir)
     loaders = (train_loader, valid_loader, test_loader)

@@ -6,13 +6,12 @@ This module contains utility functions and tools used to instantiate data loader
 import inspect
 import json
 import logging
+import numpy as np
 import os
+from pathlib import Path as pth
 import pprint
 import sys
-
-import numpy as np
 import tqdm
-
 import thelper.tasks
 import thelper.transforms
 import thelper.utils
@@ -181,9 +180,9 @@ def create_loaders(config, save_dir=None):
     data_logger_dir = None
     if save_dir is not None:
         thelper.utils.init_logger()  # make sure all logging is initialized before attaching this part
-        data_logger_dir = os.path.join(save_dir, "logs")
+        data_logger_dir = pth(save_dir).joinpath("logs")
         os.makedirs(data_logger_dir, exist_ok=True)
-        data_logger_path = os.path.join(data_logger_dir, "data.log")
+        data_logger_path = data_logger_dir.joinpath("data.log")
         data_logger_format = logging.Formatter("[%(asctime)s - %(process)s] %(levelname)s : %(message)s")
         data_logger_fh = logging.FileHandler(data_logger_path)
         data_logger_fh.setLevel(logging.NOTSET)
@@ -206,13 +205,13 @@ def create_loaders(config, save_dir=None):
     logger.debug("splitting datasets and creating loaders...")
     train_idxs, valid_idxs, test_idxs = loader_factory.get_split(datasets, task)
     if save_dir is not None:
-        with open(os.path.join(data_logger_dir, "task.log"), "a+") as fd:
+        with open(data_logger_dir.joinpath("task.log"), "a+") as fd:
             fd.write(f"session: {session_name}-{logstamp}\n")
             fd.write(f"version: {repover}\n")
             fd.write(str(task) + "\n")
         for dataset_name, dataset in datasets.items():
-            dataset_log_file = os.path.join(data_logger_dir, dataset_name + ".log")
-            if not loader_factory.skip_verif and os.path.isfile(dataset_log_file):
+            dataset_log_file = data_logger_dir.joinpath(dataset_name + ".log")
+            if not loader_factory.skip_verif and dataset_log_file.isfile():
                 logger.info(f"verifying sample list for dataset '{dataset_name}'...")
                 log_content = thelper.utils.load_config(dataset_log_file, as_json=True, add_name_if_missing=False)
                 assert isinstance(log_content, dict), "old split data logs no longer supported for verification"
@@ -244,7 +243,7 @@ def create_loaders(config, save_dir=None):
         printer = pprint.PrettyPrinter(indent=2)
         log_sample_metadata = thelper.utils.get_key_def(["log_samples", "log_samples_metadata"], config, default=False)
         for dataset_name, dataset in datasets.items():
-            dataset_log_file = os.path.join(data_logger_dir, dataset_name + ".log")
+            dataset_log_file = data_logger_dir.joinpath(dataset_name + ".log")
             samples = dataset.samples if hasattr(dataset, "samples") and dataset.samples is not None \
                 and len(dataset.samples) == len(dataset) else []
             log_content = {
