@@ -22,7 +22,7 @@ import thelper
 TASK_COMPAT_CHOICES = frozenset(["old", "new", "compat"])
 
 
-def create_session(config, save_dir):
+def create_session(config, save_dir,backup_ext='.json'):
     """Creates a session to train a model.
 
     All generated outputs (model checkpoints and logs) will be saved in a directory named after the
@@ -44,7 +44,7 @@ def create_session(config, save_dir):
     assert session_name is not None, "config missing 'name' field required for output directory"
     logger.info("creating new training session '%s'..." % session_name)
     thelper.utils.setup_globals(config)
-    save_dir = thelper.utils.get_save_dir(save_dir, session_name, config)
+    save_dir = thelper.utils.get_save_dir(save_dir, session_name, config, backup_ext=backup_ext)
     logger.debug("session will be saved at '%s'" % os.path.abspath(save_dir).replace("\\", "/"))
     task, train_loader, valid_loader, test_loader = thelper.data.create_loaders(config, save_dir)
     model = thelper.nn.create_model(config, task, save_dir=save_dir)
@@ -504,6 +504,7 @@ def make_argparser():
     new_ap = subparsers.add_parser("new", help="creates a new session from a config file")
     new_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file")
     new_ap.add_argument("-d", "--save-dir", required=True, type=str, help="path to the session output root directory")
+    new_ap.add_argument("-b", "--backup_ext", required=False, type=str, default=".json", help="backup config file extension")
     cl_new_ap = subparsers.add_parser("cl_new", help="creates a new session from a config file for the cluster")
     cl_new_ap.add_argument("-c", "--config", required=True, type=str, help="path to the session configuration file")
     cl_new_ap.add_argument("-d", "--save-dir", required=True, type=str, help="path to the session output root directory")
@@ -586,7 +587,8 @@ def main(args=None, argparser=None):
             device = thelper.utils.get_key_def("device", trainer_config, None)
             if device is not None:
                 raise AssertionError("cannot specify device in config for cluster sessions, it is determined at runtime")
-        create_session(config, args.save_dir)
+        backup_ext=args.backup_ext
+        create_session(config, args.save_dir, backup_ext=backup_ext)
     elif args.mode == "resume":
         ckptdata = None
         if args.ckpt_path is not None:
