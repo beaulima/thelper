@@ -501,8 +501,6 @@ class ImageCopyDataset(Dataset):
                             })
             class_map = {k: v for k, v in class_map.items() if len(v) > 0}
         elif os.path.isfile(self.root):
-
-
             with open(self.root, 'r') as fp:
                 for file in fp.readlines():
                     file = file.strip()
@@ -535,8 +533,6 @@ class ImageCopyDataset(Dataset):
         sample = self.samples[idx]
         image_path = sample[self.path_key]
         original_img = cv.imread(image_path)
-
-
 
         if original_img is None:
             raise AssertionError("invalid image at '%s'" % image_path)
