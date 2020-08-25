@@ -87,6 +87,7 @@ def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typin
         for ref_task2 in tasks:
             if type(ref_task1) != type(ref_task2):
                 all_same = False
+                break
     # Otherwise try to compose a compatible task
     if not all_same:
         ref_task = None

@@ -536,7 +536,7 @@ def draw(task, input, pred=None, target=None, block=False, ch_transpose=True, fl
         color_map = task.color_map if task.color_map else {idx: get_label_color_mapping(idx) for idx in task.class_indices.values()}
         return draw_bboxes(images=input, preds=pred, bboxes=target, color_map=color_map, redraw=redraw, block=block, **kwargs)
     elif isinstance(task, thelper.tasks.Regression):
-        swap_channels = isinstance(task, thelper.tasks.SuperResolution)  # must update BxCxHxW to BxHxWxC in targets/preds
+        swap_channels = isinstance(task, thelper.tasks.SuperResolution) or isinstance(task, thelper.tasks.ImageToImageRegression) # must update BxCxHxW to BxHxWxC in targets/preds
         # @@@ todo: cleanup swap_channels above via flag in superres task?
         return draw_predicts(images=input, preds=pred, targets=target,
                              swap_channels=swap_channels, redraw=redraw, block=block, **kwargs)

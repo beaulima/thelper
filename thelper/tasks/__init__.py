@@ -11,6 +11,7 @@ from thelper.tasks.classif import Classification  # noqa: F401
 from thelper.tasks.detect import Detection  # noqa: F401
 from thelper.tasks.regr import Regression  # noqa: F401
 from thelper.tasks.regr import SuperResolution  # noqa: F401
+from thelper.tasks.regr import ImageToImageRegression
 from thelper.tasks.segm import Segmentation  # noqa: F401
 from thelper.tasks.utils import Task  # noqa: F401
 from thelper.tasks.utils import create_global_task  # noqa: F401

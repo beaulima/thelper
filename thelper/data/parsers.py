@@ -450,6 +450,110 @@ class ImageFolderDataset(ClassificationDataset):
         return sample
 
 
+class ImageCopyDataset(Dataset):
+    """Image folder dataset specialization interface for super-resolution tasks.
+
+    This specialization is used to parse simple image subfolders or to use a file text containing the path of each image.
+    It it used to provide a proper task interface as well as path/class metadata in each loaded packet for
+    metrics/logging output.  From the images use as label (highres_image), it will create low resolution images as
+    inputs for superres nn.
+    """
+
+    def __init__(self, root,
+                 transforms=None,
+                 input_key="copy",
+                 target_key="original",
+                 path_key="path",
+                 idx_key="idx",
+                 label_key="label",
+                 image_exts=(".jpg", ".jpeg", ".JPEG", ".bmp", ".png", ".ppm", ".pgm", ".tif")):
+
+        """Image folder dataset parser constructor."""
+
+        self.root = root
+        if self.root is None:
+            raise AssertionError("invalid input data root '%s'" % self.root)
+        self.image_exts = image_exts
+        self.input_key = input_key
+        self.target_key = target_key
+        self.path_key = path_key
+        self.idx_key = idx_key
+        self.label_key = label_key  # to provide folder names
+        class_map = {}
+        samples = []
+        if os.path.isdir(self.root):
+
+            for child in os.listdir(self.root):
+                if os.path.isdir(os.path.join(self.root, child)):
+                    class_map[child] = 0
+            if not class_map:
+                raise AssertionError("could not find any image folders at '%s'" % self.root)
+            for class_name in class_map:
+                class_folder = os.path.join(self.root, class_name)
+                for folder, subfolder, files in os.walk(class_folder):
+                    for file in files:
+                        ext = os.path.splitext(file)[1].lower()
+                        if ext in image_exts:
+                            class_map[class_name]=len(samples)
+                            samples.append({
+                                self.path_key: os.path.join(folder, file),
+                                self.label_key: class_name
+                            })
+            class_map = {k: v for k, v in class_map.items() if len(v) > 0}
+        elif os.path.isfile(self.root):
+
+
+            with open(self.root, 'r') as fp:
+                for file in fp.readlines():
+                    file = file.strip()
+                    if not os.path.exists(file):
+                        raise AssertionError(f"could not locate any subdir in '{file}' with images to load" )
+                    ext = os.path.splitext(file)[1].lower()
+                    if ext in image_exts:
+                        class_name = os.path.basename(os.path.dirname(file))
+                        samples.append({
+                            self.path_key: file,
+                            self.label_key: class_name
+                        })
+                        class_map[class_name]=len(samples)
+
+        if not class_map:
+            raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
+        meta_keys = [self.path_key, self.idx_key, self.label_key]
+        super(ImageCopyDataset, self).__init__(transforms=transforms)
+        self.task = thelper.tasks.ImageToImageRegression(input_key=self.input_key, target_key=self.target_key, meta_keys=meta_keys)
+        self.samples = samples
+
+    def __getitem__(self, idx):
+        """Returns the data sample (a dictionary) for a specific (0-based) index."""
+        if isinstance(idx, slice):
+            return self._getitems(idx)
+        if idx >= len(self.samples):
+            raise AssertionError("sample index is out-of-range")
+        if idx < 0:
+            idx = len(self.samples) + idx
+        sample = self.samples[idx]
+        image_path = sample[self.path_key]
+        original_img = cv.imread(image_path)
+
+
+
+        if original_img is None:
+            raise AssertionError("invalid image at '%s'" % image_path)
+        copy_imag = np.copy(original_img)
+
+        sample = {
+            self.input_key: original_img,
+            self.target_key: copy_imag,
+            self.idx_key: idx,
+            **sample
+        }
+
+        if self.transforms:
+            sample = self.transforms(sample)
+
+        return sample
+
 class SuperResDataset(Dataset):
     """Image folder dataset specialization interface for super-resolution tasks.
 
