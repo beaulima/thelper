@@ -62,7 +62,7 @@ def create_task(config: typing.Union[thelper.typedefs.ConfigDict, typing.AnyStr]
         return task
 
 
-def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typing.Optional["Task"]:
+def create_global_task_tmp(tasks: typing.Optional[typing.Iterable["Task"]]) -> typing.Optional["Task"]:
     """Returns a new task object that is compatible with a list of subtasks.
 
     When different datasets must be combined in a session, the tasks they define must also be
@@ -81,7 +81,7 @@ def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typin
         raise AssertionError("tasks should be provided as list")
     ref_task = None
     all_same = True
-    # Check all task are the same and select one of them as global task
+    # Check all tasks are the same and select one of them as global task
     for ref_task1 in tasks:
         ref_task = copy.deepcopy(ref_task1)
         for ref_task2 in tasks:
@@ -107,6 +107,44 @@ def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typin
             else:
                 # otherwise, keep asking the new one to stay compatible with the base ref
                 ref_task = task.get_compat(ref_task)
+    return ref_task
+
+def create_global_task(tasks: typing.Optional[typing.Iterable["Task"]]) -> typing.Optional["Task"]:
+    """Returns a new task object that is compatible with a list of subtasks.
+
+    When different datasets must be combined in a session, the tasks they define must also be
+    merged. This functions allows us to do so as long as the tasks all share a common objective.
+    If creating a globally-compatible task is impossible, this function will raise an exception.
+    Otherwise, the returned task object can be used to replace the subtasks of all used datasets.
+
+    .. seealso::
+        | :class:`thelper.tasks.utils.Task`
+        | :func:`thelper.tasks.utils.create_task`
+        | :func:`thelper.data.utils.create_parsers`
+    """
+    if tasks is None:
+        return None
+    if not isinstance(tasks, list):
+        raise AssertionError("tasks should be provided as list")
+
+    ref_task = None
+    for task in tasks:
+        if task is None:
+            # skip all undefined tasks
+            continue
+        if not isinstance(task, thelper.tasks.Task):
+            raise AssertionError("all tasks should derive from thelper.tasks.Task")
+        if ref_task is None:
+            # no reference task set; take the first instance and continue to next
+            ref_task = task
+            continue
+        if type(ref_task) != Task:
+            # reference task already specialized, we can ask it for compatible instances
+            ref_task = ref_task.get_compat(task)
+        else:
+            # otherwise, keep asking the new one to stay compatible with the base ref
+            ref_task = task.get_compat(ref_task)
+
     return ref_task
 
 
