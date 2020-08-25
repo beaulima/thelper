@@ -101,6 +101,7 @@ def load_transforms(stages, avoid_transform_wrapper=False):
         operation_params = thelper.utils.get_key_def(["params", "param", "parameters", "kwargs"], stage, {})
         assert isinstance(operation_params, dict), f"stage #{stage_idx} parameters are not provided as a dictionary"
         operation_targets = thelper.utils.get_key_def(["target_key", "target_keys", "key", "keys"], stage)
+        operation_outputs = thelper.utils.get_key_def(["output_key", "output_keys"], stage)
         if operation_targets is not None:
             assert isinstance(operation_targets, (list, str, int)), \
                 f"stage #{stage_idx} target keys are not provided as a list or string/int"
@@ -155,7 +156,8 @@ def load_transforms(stages, avoid_transform_wrapper=False):
                                                                           torchvision.transforms.Compose)):
                 operations.append(thelper.transforms.wrappers.TransformWrapper(operation,
                                                                                target_keys=operation_targets,
-                                                                               linked_fate=linked_fate))
+                                                                               linked_fate=linked_fate,
+                                                                               output_keys=operation_outputs))
             else:
                 operations.append(operation)
     if len(operations) > 1:

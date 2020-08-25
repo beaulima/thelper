@@ -87,6 +87,48 @@ class ToNumpy:
         return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
             f"(reorder_bgr={self.reorder_bgr})"
 
+class CopyTo:
+    """Copy the target key to the output key.
+
+    This operation is deterministic. The code relies on OpenCV, meaning the border arguments
+    must be compatible with ``cv2.copyMakeBorder``.
+
+    Attributes:
+        size: the size of the target crop (tuple of width, height).
+        relative: specifies whether the target crop size is relative to the image size or not.
+        bordertype: argument forwarded to ``cv2.copyMakeBorder``.
+        borderval: argument forwarded to ``cv2.copyMakeBorder``.
+    """
+
+    def __init__(self):
+        """Validates and initializes center crop parameters.
+
+        Args:
+            :
+        """
+
+
+    def __call__(self, sample):
+        """Extracts and returns a central crop from the provided image.
+
+        Args:
+            sample: the image to generate the crop from; should be a 2d or 3d numpy array.
+
+        Returns:
+            The center crop.
+        """
+
+        return sample
+
+    def invert(self, sample):
+        """Specifies that this operation cannot be inverted, as data loss is incurred during image transformation."""
+        raise RuntimeError("cannot be inverted")
+
+    def __repr__(self):
+        """Provides print-friendly output for class attributes."""
+        return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
+            f"()"
+
 
 class CenterCrop:
     """Returns a center crop from a given image via OpenCV and numpy.

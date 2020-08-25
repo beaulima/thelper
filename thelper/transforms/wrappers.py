@@ -340,7 +340,7 @@ class TransformWrapper:
         linked_fate: specifies whether images given in a list/tuple should have the same fate or not.
     """
 
-    def __init__(self, operation, params=None, probability=1, convert_pil=False, target_keys=None, linked_fate=True):
+    def __init__(self, operation, params=None, probability=1, convert_pil=False, target_keys=None, linked_fate=True, output_keys=None):
         """Receives and stores a torchvision transform operation for later use.
 
         If the operation is given as a string, it is assumed to be a class name and it will
@@ -369,6 +369,7 @@ class TransformWrapper:
         self.convert_pil = convert_pil
         self.target_keys = target_keys
         self.linked_fate = linked_fate
+        self.output_keys = output_keys
 
     @staticmethod
     def _unpack(sample, force_flatten=False, convert_pil=False):
@@ -458,6 +459,9 @@ class TransformWrapper:
                 vals = out_vals
             else:
                 vals = self(vals, force_linked_fate=force_linked_fate, op_seed=op_seed, in_cvts=in_cvts)
+            if self.output_keys is not None:
+                keys = self.output_keys
+
             sample = {k: vals[keys.index(k)] if k in keys else sample[k] for k in sample}
             return sample
         out_cvts = in_cvts is not None
