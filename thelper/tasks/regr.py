@@ -252,3 +252,14 @@ class ImageToImageRegression(Regression):
                                               input_shape=input_shape, target_shape=input_shape,
                                               target_type=target_type, target_min=target_min,
                                               target_max=target_max)
+
+    def get_compat(self, task):
+        """Returns a task instance compatible with the current task and the given one."""
+        # currently not checking for input/target param intersections between similar regression tasks
+        assert self.check_compat(task), f"cannot create compatible task between:\n\t{str(self)}\n\t{str(task)}"
+        meta_keys = list(set(self.meta_keys + task.meta_keys))
+        return ImageToImageRegression(input_key=self.input_key, target_key=self.gt_key, meta_keys=meta_keys,
+                          input_shape=self.input_shape if self.input_shape is not None else task.input_shape,
+                          target_type=self.target_type if self.target_type is not None else task.target_type,
+                          target_min=self.target_min if self.target_min is not None else task.target_min,
+                          target_max=self.target_max if self.target_max is not None else task.target_max)
