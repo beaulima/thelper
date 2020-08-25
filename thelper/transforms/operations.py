@@ -299,10 +299,14 @@ class RandomCrop:
         h = sample.shape[0]
         w = sample.shape[1]
 
-        # print(sample.shape, w - sw, h - sh )
+        #print(sample.shape, w - sw, h - sh )
         # compute offsets
-        x0 = np.random.randint(low=0, high=w - sw)
-        y0 = np.random.randint(low=0, high=h - sh)
+        x0 = w - sw
+        if x0 > 0:
+            x0 = np.random.randint(low=0, high=w - sw)
+        y0 = h - sh
+        if y0 > 0:
+            y0 = np.random.randint(low=0, high=h - sh)
 
         sample = sample[y0:y0 + sh, x0:x0 + sw]
 
