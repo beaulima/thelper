@@ -1,0 +1,139 @@
+{
+  "overwrite": true,
+  "cudnn": {
+    "benchmark": false,
+    "deterministic": true
+  },
+  "datasets": {
+    "superres": {
+      "type": "thelper.data.ImageCopyDataset",
+      "transforms": [
+        {
+          "operation": "thelper.transforms.RandomCrop",
+          "params": {
+            "size": 64
+          },
+          "target_key": [
+            "original"
+          ]
+        },
+        {
+          "operation": "thelper.transforms.CopyTo",
+          "params": {
+          },
+          "target_key": [
+            "original"
+          ],
+          "output_key": [
+            "copy"
+          ]
+        },
+        {
+          "operation": "thelper.transforms.Resize",
+          "params": {
+            "dsize": [
+              32,
+              32
+            ]
+          },
+          "target_key": [
+            "copy"
+          ]
+        },
+        {
+          "operation": "thelper.transforms.Resize",
+          "params": {
+            "dsize": [
+              64,
+              64
+            ]
+          },
+          "target_key": [
+            "copy"
+          ]
+        }
+      ],
+      "params": {
+        "root": "@@@@@@@@@@ PATH_TO_IMAGE_FOLDER @@@@@@@@@@"
+      }
+    }
+  },
+  "loaders": {
+    "train_batch_size": 32,
+    "valid_batch_size": 16,
+    "train_shuffle": true,
+    "valid_shuffle": true,
+    "test_shuffle": true,
+    "valid_seed": 0,
+    "test_seed": 0,
+    "torch_seed": 0,
+    "numpy_seed": 0,
+    "random_seed": 0,
+    "workers": 0,
+    "pin_memory": false,
+    "drop_last": false,
+    "train_scale": 2.0,
+    "base_transforms": [
+      {
+        "operation": "torchvision.transforms.ToTensor",
+        "target_key": [
+          "original",
+          "copy"
+        ]
+      }
+    ],
+    "train_split": {
+      "superres": 0.7
+    },
+    "valid_split": {
+      "superres": 0.2
+    },
+    "test_split": {
+      "superres": 0.1
+    }
+  },
+  "model": {
+    "type": "thelper.nn.sr.VDSR"
+  },
+  "trainer": {
+    "device": "cuda:all",
+    "epochs": 150,
+    "save_freq": 1,
+    "monitor": "psnr",
+    "use_tbx": true,
+    "display_train": true,
+    "display_valid": true,
+    "optimization": {
+      "loss": {
+        "type": "torch.nn.MSELoss",
+        "params": {}
+      },
+      "optimizer": {
+        "type": "torch.optim.Adam",
+        "params": {
+          "lr": 0.001
+        }
+      },
+      "scheduler": {
+        "type": "torch.optim.lr_scheduler.ReduceLROnPlateau",
+        "params": {
+          "mode": "max",
+          "factor": 0.1,
+          "patience": 3,
+          "verbose": true,
+          "threshold": 0.0001,
+          "threshold_mode": "rel"
+        },
+        "step_metric": "psnr"
+      }
+    },
+    "metrics": {
+      "psnr": {
+        "type": "thelper.optim.PSNR",
+        "params": {
+          "data_range": 1.0
+        }
+      }
+    }
+  }
+}
