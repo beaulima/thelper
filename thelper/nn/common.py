@@ -222,15 +222,15 @@ class Upsample2xBlock(torch.nn.Module):
 def weights_init_kaiming(m):
     classname = m.__class__.__name__
     if classname.find('Linear') != -1:
-        torch.nn.init.kaiming_normal(m.weight)
+        torch.nn.init.kaiming_normal_(m.weight)
         if m.bias is not None:
             m.bias.data.zero_()
     elif classname.find('Conv2d') != -1:
-        torch.nn.init.kaiming_normal(m.weight)
+        torch.nn.init.kaiming_normal_(m.weight)
         if m.bias is not None:
             m.bias.data.zero_()
     elif classname.find('ConvTranspose2d') != -1:
-        torch.nn.init.kaiming_normal(m.weight)
+        torch.nn.init.kaiming_normal_(m.weight)
         if m.bias is not None:
             m.bias.data.zero_()
     elif classname.find('Norm') != -1:
@@ -242,15 +242,15 @@ def weights_init_kaiming(m):
 def weights_init_xavier(m):
     classname = m.__class__.__name__
     if classname.find('Linear') != -1:
-        torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.xavier_uniform_(m.weight)
         if m.bias is not None:
             m.bias.data.zero_()
     elif classname.find('Conv2d') != -1:
-        torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.xavier_uniform_(m.weight)
         if m.bias is not None:
             m.bias.data.zero_()
     elif classname.find('ConvTranspose2d') != -1:
-        torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.xavier_uniform_(m.weight)
         if m.bias is not None:
             m.bias.data.zero_()
     elif classname.find('Norm') != -1:
