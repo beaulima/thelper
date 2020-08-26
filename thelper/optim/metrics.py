@@ -1123,6 +1123,120 @@ class PSNR(Metric):
         """Returns the scalar optimization goal of this metric (maximization)."""
         return Metric.maximize
 
+@thelper.concepts.regression
+class ENL(Metric):
+    r"""Equivalent Number of Looks (ENL) metric interface.
+
+    The equivalent (or effective) number of looks (ENL) is a parameter of multilook synthetic aperture radar (SAR)
+    images, which describes the degree of averaging applied to the SAR measurements during data formation and
+    sometimes also postprocessing.
+
+    The ENL of a modified signal :math:`x` is defined as:
+
+    .. math::
+         \text{ENL}(x) = \Bigg( \frac{\text{MEAN}(x)}{\text{STD}(x)}**2 \Bigg)
+
+    where :math:`\text{MEAN}(x)` returns the mean and  :math:`\text{STD}(x)` returns the standard deviation.
+
+    Usage example inside a session configuration file::
+
+        # ...
+        # lists all metrics to instantiate as a dictionary
+        "metrics": {
+            # ...
+            # this is the name of the example metric; it is used for lookup/printing only
+            "enl": {
+                # this type is used to instantiate the metric
+                "type": "thelper.optim.metrics.ENL",
+                "params": {
+                }
+            },
+            # ...
+        }
+        # ...
+
+    Attributes:
+        max_win_size: maximum moving average window size to use (default=None, which equals dataset size).
+        enls: array of enl values stored for window-based averaging.
+        warned_eval_bad: toggles whether the division-by-zero warning has been flagged or not.
+        copolar_chns: list of channels number corresponding to intensity (copolar) in a T9 coherence/covariance matrix
+    """
+
+    def __init__(self, max_win_size=None, copolar_chns=[0,5,8]):
+        """Receives all necessary initialization arguments to compute signal ENLs,
+
+        See :class:`thelper.optim.metrics.ENL` for information on arguments.
+        """
+        self.max_win_size = max_win_size
+        self.enls = None  # will be instantiated on first iter
+        self.warned_eval_bad = False
+        self.copolar_chns = copolar_chns
+
+    def __repr__(self):
+        """Returns a generic print-friendly string containing info about this metric."""
+        return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
+            f"(data_range={repr(self.data_range)}, max_win_size={repr(self.max_win_size)})"
+
+    def update(self,         # see `thelper.typedefs.IterCallbackParams` for more info
+               task,         # type: thelper.tasks.utils.Task
+               input,        # type: thelper.typedefs.InputType
+               pred,         # type: thelper.typedefs.RegressionPredictionType
+               target,       # type: thelper.typedefs.RegressionTargetType
+               sample,       # type: thelper.typedefs.SampleType
+               loss,         # type: Optional[float]
+               iter_idx,     # type: int
+               max_iters,    # type: int
+               epoch_idx,    # type: int
+               max_epochs,   # type: int
+               output_path,  # type: AnyStr
+               **kwargs,     # type: Any
+               ):            # type: (...) -> None
+        """Receives the latest predictions and target values from the training session.
+
+        The exact signature of this function should match the one of the callbacks defined in
+        :class:`thelper.train.base.Trainer` and specified by ``thelper.typedefs.IterCallbackParams``.
+        """
+        assert len(kwargs) == 0, "unexpected extra arguments present in update call"
+        assert iter_idx is not None and max_iters is not None and iter_idx < max_iters, \
+            "bad iteration indices given to metric update function"
+        curr_win_size = max_iters if self.max_win_size is None else min(self.max_win_size, max_iters)
+        if self.enls is None or self.enls.size != curr_win_size:
+            # each 'iteration' will have a corresponding bin with the enls for that batch
+            self.enls = np.asarray([None] * curr_win_size)
+        curr_idx = iter_idx % curr_win_size
+        if target is None or target.numel() == 0:
+            # only accumulate results when groundtruth is available
+            self.enls[curr_idx] = None
+            return
+        assert pred.shape == target.shape, "prediction/gt tensors shape mismatch"
+
+        data = pred.numpy()[:,self.copolar_chns]
+        mse = np.mean(data, axis=(2,3), dtype=np.float64)
+        std = np.std(data, axis=(2, 3), dtype=np.float64)
+        enl = np.mean((mse / std) ** 2)
+        self.enls[curr_idx] = enl
+
+    def eval(self):
+        """Returns the current (average) ENL based on the accumulated values.
+
+        Will issue a warning if no predictions have been accumulated yet.
+        """
+        if self.enls is None or self.enls.size == 0 or len([v for v in self.enls if v is not None]) == 0:
+            if not self.warned_eval_bad:
+                self.warned_eval_bad = True
+                logger.warning("enls eval result invalid (set as 0.0), no results accumulated")
+            return 0.0
+        return np.mean([v for v in self.enls if v is not None])
+
+    def reset(self):
+        """Toggles a reset of the metric's internal state, deallocating the enls array."""
+        self.enls = None
+
+    @property
+    def goal(self):
+        """Returns the scalar optimization goal of this metric (maximization)."""
+        return Metric.maximize
+
 
 @thelper.concepts.detection
 class AveragePrecision(Metric):
