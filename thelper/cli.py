@@ -461,8 +461,8 @@ def export_model(config, save_dir):
         trace_input = eval(trace_input)
     logger.info("exporting model '%s'..." % session_name)
     thelper.utils.setup_globals(config)
-    save_dir = thelper.utils.get_save_dir(save_dir, session_name, config)
-    logger.debug("exported checkpoint will be saved at '%s'" % os.path.abspath(save_dir).replace("\\", "/"))
+    save_dir = pth(thelper.utils.get_save_dir(save_dir, session_name, config))
+    logger.debug("exported checkpoint will be saved at '%s'" % save_dir.abspath())
     model = thelper.nn.create_model(config, task, save_dir=save_dir)
     log_stamp = thelper.utils.get_log_stamp()
     model_type = model.get_name()
@@ -479,12 +479,12 @@ def export_model(config, save_dir):
         "config": config
     }
     if trace_input is not None:
-        trace_path = os.path.join(save_dir, trace_name)
+        trace_path = save_dir.joinpath(trace_name)
         torch.jit.trace(model, trace_input).save(trace_path)
         export_state["model"] = trace_name  # will be loaded in thelper.utils.load_checkpoint
     else:
         export_state["model"] = model.state_dict() if save_raw else model
-    torch.save(export_state, os.path.join(save_dir, ckpt_name))
+    torch.save(export_state, save_dir.joinpath(ckpt_name))
     logger.debug("all done")
 
 
