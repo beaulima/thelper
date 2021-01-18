@@ -3,13 +3,17 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
-import gdal
 import numpy as np
 import torch
 
 import thelper.concepts
 import thelper.data.geo
 from thelper.infer.base import Tester
+
+try:
+    from osgeo import gdal
+except (ImportError, ModuleNotFoundError):
+    import gdal
 
 if TYPE_CHECKING:
     from typing import AnyStr, Optional, Tuple  # noqa: F401

@@ -33,7 +33,7 @@ import yaml
 import thelper.typedefs  # noqa: F401
 
 if TYPE_CHECKING:
-    from typing import Any, AnyStr, Callable, Dict, List, Optional, Tuple, Type, Union  # noqa: F401
+    from typing import Any, AnyStr, Callable, Dict, List, Mapping, Optional, Tuple, Type, Union  # noqa: F401
     from types import FunctionType  # noqa: F401
     from thelper.session.base import SessionRunner
 
@@ -768,6 +768,14 @@ def import_function(func,           # type: Union[Callable, AnyStr, List, Dict]
     return func
 
 
+def get_func_params(func,  # type: Callable
+                    ):     # type: (...) -> Mapping[str]
+    """Returns the parameters expected when calling the given function. Supports class constructors."""
+    if inspect.isclass(func):
+        func = func.__init__
+    return inspect.signature(func).parameters
+
+
 def check_func_signature(func,      # type: FunctionType
                          params     # type: List[str]
                          ):         # type: (...) -> None
@@ -777,10 +785,9 @@ def check_func_signature(func,      # type: FunctionType
     if params is not None:
         if not isinstance(params, list) or not all([isinstance(p, str) for p in params]):
             raise AssertionError("unexpected param name list format")
-        import inspect
-        func_sig = inspect.signature(func)
+        func_params = get_func_params(func)
         for p in params:
-            if p not in func_sig.parameters:
+            if p not in func_params:
                 raise AssertionError("function missing parameter '%s'" % p)
 
 

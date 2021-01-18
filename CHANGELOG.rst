@@ -6,7 +6,19 @@ Changelog
 `Unreleased <http://github.com/plstcharles/thelper/tree/master>`_ (latest)
 ----------------------------------------------------------------------------------
 
-.. **INSERT APPLIED CHANGES HERE**
+* Remove extra code for ``infer`` mode to setup ``Tester`` session runner.
+* Retrieve model type from upper level config dictionary if available without failing
+  (case encountered following exported model checkpoint during reload).
+* Fix dumping of JSON configurations with non-serializable Tensors during ``infer`` mode.
+* Fix imports of GDAL package whether available via ``osgeo`` or directly.
+* Refactor replicated ``ColorMap`` and ``dontcare``/``background`` operations into specific handlers.
+* Add demo configuration for inference of ``Segmentation`` tasks using geo-based model.
+* Add ``thelper.train.utils.SegmOutputGenerator`` to report ``Segmentation`` inference results.
+
+`0.6.2 <http://github.com/plstcharles/thelper/tree/v0.6.2>`_ (2020/10/01)
+----------------------------------------------------------------------------------
+
+* Added ``SelectChannels`` transform operator for inplace sample modifications that might need it.
 
 `0.6.1 <http://github.com/plstcharles/thelper/tree/v0.6.1>`_ (2020/07/29)
 ----------------------------------------------------------------------------------

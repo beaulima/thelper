@@ -3,7 +3,6 @@
 This module contains utility functions and tools used by the other modules of this package.
 """
 import copy
-import inspect
 import logging
 
 import numpy as np
@@ -149,8 +148,8 @@ def create_loss_fn(config, model, loader=None, uploader=None):
     if isinstance(model.task, thelper.tasks.Segmentation):
         ignore_index_param_name = thelper.utils.get_key_def("ignore_index_param_name", config, "ignore_index")
         ignore_index_label_name = thelper.utils.get_key_def("ignore_index_label_name", config, "dontcare")
-        loss_sig = inspect.signature(loss_type)
-        if ignore_index_param_name in loss_sig.parameters:
+        loss_expected_params = thelper.utils.get_func_params(loss_type)
+        if ignore_index_param_name in loss_expected_params:
             if ignore_index_label_name != "dontcare":
                 loss_params[ignore_index_param_name] = model.task.class_indices[ignore_index_label_name]
             else:
@@ -158,7 +157,7 @@ def create_loss_fn(config, model, loader=None, uploader=None):
             if loss_params[ignore_index_param_name] is None:
                 # some loss functions dont actually accept 'None' as the dontcare value (e.g. cross entropy loss)
                 # ... switch back to the default value in that case
-                loss_params[ignore_index_param_name] = loss_sig.parameters[ignore_index_param_name].default
+                loss_params[ignore_index_param_name] = loss_expected_params[ignore_index_param_name].default
     if weight_param_name in loss_params:
         loss_params[weight_param_name] = converter(loss_params[weight_param_name])
     loss = loss_type(**loss_params)
@@ -181,13 +180,21 @@ def create_optimizer(config, model):
     via a dictionary named 'params'.
     """
     logger.debug("loading optimizer")
+    if isinstance(config, torch.optim.Optimizer):
+        # user passed in a fully instantiated optimizer; trust them and return it directly...
+        return config
     if not isinstance(config, dict):
         raise AssertionError("config should be provided as a dictionary")
     if "type" not in config or not config["type"]:
         raise AssertionError("optimizer config missing 'type' field")
     optimizer_type = thelper.utils.import_class(config["type"])
     optimizer_params = thelper.utils.get_key_def(["params", "parameters"], config, {})
-    optimizer = optimizer_type(filter(lambda p: p.requires_grad, model.parameters()), **optimizer_params)
+    if "params" not in optimizer_params:  # "params" here is defined by torch.optim.Optimizer
+        # if the user did not specify the model params to optimize, assume we must use all of them
+        learnable_params = filter(lambda p: p.requires_grad, model.parameters())
+        optimizer = optimizer_type(params=learnable_params, **optimizer_params)
+    else:
+        optimizer = optimizer_type(**optimizer_params)
     return optimizer
 
 

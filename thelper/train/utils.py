@@ -19,7 +19,7 @@ import thelper.concepts
 import thelper.ifaces
 import thelper.typedefs  # noqa: F401
 import thelper.utils
-from thelper.ifaces import ClassNamesHandler, FormatHandler, PredictionConsumer
+from thelper.ifaces import ClassNamesHandler, ColorMapHandler, FormatHandler, PredictionConsumer
 from thelper.optim.eval import compute_bbox_iou
 from thelper.tasks.detect import BoundingBox
 
@@ -761,6 +761,167 @@ class DetectLogger(PredictionConsumer, ClassNamesHandler, FormatHandler):
         self.bbox = None
         self.true = None
         self.meta = None
+
+
+@thelper.concepts.segmentation
+class SegmOutputGenerator(PredictionConsumer, ClassNamesHandler, FormatHandler, ColorMapHandler):
+    """segmentation output generator.
+
+    This class produces segmented output samples from model inference and provided inputs.
+    Outputs are saved into specified directory or in configured save directory by the session runner.
+
+    Usage examples inside a session configuration file::
+
+        # ...
+        # lists all metrics to instantiate as a dictionary
+        "metrics": {
+            # ...
+            # this is the name of the example consumer; it is used for lookup/printing only
+            "segmenter": {
+                # this type is used to instantiate the confusion matrix report object
+                "type": "thelper.train.utils.SegmOutputGenerator",
+                "params": {
+                    # (optional) prefix value to saved output files
+                    "prefix": "segm",
+                    # (optional) extension of the resulting image file (default: .tif)
+                    "extension": ".tif",
+                    # format of the generated metadata file with indices, labels and class name mapping
+                    "format": "json",
+                    # (optional) list of class names or map of output index to label name
+                    # if not provided, will attempt to retrieve applicable ones from model task
+                    "class_names": ["class-1", "class-2"],
+                    # (optional) color map of labels to colors to apply for generating output predictions
+                    # if not provided, will use default sets for distinctive colors
+                    "color_map": {}
+                    # (optional) name of the class label to consider as 'ignore' class
+                    # defaults to black if not specified in color mapping and if applicable for employed model
+                    "dontcare": "background"
+                }
+            },
+            # ...
+        }
+        # ...
+
+    Attributes:
+        prefix: prefix to output sample names.
+        extension: extension of the generated output samples.
+        format: metadata output format.
+        class_names: labels associated to output pixel indices for reporting.
+        color_map: mapping of indices to colors applied to segmented output samples.
+        dontcare: index of class to ignored, default to black color if not provided in color map.
+    """
+
+    def __init__(self,
+                 prefix="segm",         # type: AnyStr
+                 extension=".tif",      # type: Optional[AnyStr]
+                 format="json",         # type: Optional[AnyStr]
+                 class_names=None,      # type: Optional[thelper.typedefs.LabelMapping]
+                 color_map=None,        # type: Optional[thelper.typedefs.ClassColorMap]
+                 dontcare=None,         # type: Optional[thelper.typedefs.LabelIndex]
+                 ):                     # type: (...) -> None
+        """Receives the parameters and optional class label names used to output mapping."""
+        assert isinstance(prefix, str) and len(prefix), "invalid output filename prefix"
+        assert extension is None or (isinstance(extension, str) and len(extension)), "invalid output filename extension"
+        self.prefix = prefix
+        self.extension = extension
+        ClassNamesHandler.__init__(self, class_names=class_names)
+        ColorMapHandler.__init__(self, color_map=color_map, dontcare=dontcare)
+        FormatHandler.__init__(self, format=format)
+        self._make_map()
+
+    def __repr__(self):
+        """Returns a generic print-friendly string containing info about this consumer."""
+        return self.__class__.__module__ + "." + self.__class__.__qualname__ + \
+            f"(prefix={repr(self.prefix)}, extension={repr(self.extension)}, " + \
+            f"color_map={repr(self.color_map)}, dontcare={repr(self.dontcare)}, " + \
+            f"class_names={repr(self.class_names)}, format={repr(self.format)})"
+
+    def update(self,         # see `thelper.typedefs.IterCallbackParams` for more info
+               task,         # type: thelper.tasks.utils.Task
+               input,        # type: thelper.typedefs.InputType
+               pred,         # type: thelper.typedefs.ClassificationPredictionType
+               target,       # type: thelper.typedefs.ClassificationTargetType
+               sample,       # type: thelper.typedefs.SampleType
+               loss,         # type: Optional[float]
+               iter_idx,     # type: int
+               max_iters,    # type: int
+               epoch_idx,    # type: int
+               max_epochs,   # type: int
+               output_path,  # type: AnyStr
+               **kwargs,     # type: Any
+               ):            # type: (...) -> None
+        """Receives the latest predictions and target values from the training session.
+
+        The exact signature of this function should match the one of the callbacks defined in
+        :class:`thelper.train.base.Trainer` and specified by ``thelper.typedefs.IterCallbackParams``.
+        """
+        assert len(kwargs) == 0, "unexpected extra arguments present in update call"
+        assert isinstance(task, thelper.tasks.Segmentation), "segm output generator only impl for segmentation tasks"
+        assert iter_idx is not None and max_iters is not None and iter_idx < max_iters, \
+            "bad iteration indices given to update function"
+        if task.class_names != self.class_names or \
+                (task.color_map and task.color_map != self.color_map) or \
+                (task.dontcare is not None and task.dontcare != self.dontcare):
+            # if classes where completely bad, rebuild
+            ClassNamesHandler.__init__(self, class_names=task.class_names or self.class_names)
+            self._make_map()
+        images = thelper.utils.to_numpy(input)
+        masks = None if target is None else target
+        idx_color_map = {k: v[1] for k, v in self._map.items()}
+        _, img_preds, img_masks = thelper.draw.draw_segments(images, pred, masks, color_map=idx_color_map,
+                                                             swap_channels=True, return_images=True)
+        ext = f".{self.extension}" if not self.extension.startswith(".") else self.extension
+        for res_img, res_type in zip([img_preds, img_masks], ["pred", "mask"]):
+            for idx, image in enumerate(res_img):
+                label = sample.get("label", "")
+                name = sample.get("path", "")
+                if name:
+                    name = os.path.splitext(os.path.split(name[idx])[-1])[0]
+                    name = f"_{label[idx]}_{name}" if label else f"_{name}"
+                elif label:
+                    name = f"_{label[idx]}"
+                file_name = f"{self.prefix}_{res_type}_epoch-{epoch_idx}_iter-{iter_idx}_index-{idx}{name}{ext}"
+                path = os.path.join(output_path, file_name)
+                logger.debug("Writing image: %s", path)
+                cv.imwrite(path, image)
+
+    def _make_map(self):
+        self._map = {index: [label, None] for label, index in (self.class_indices or {}).items()}
+        for index, (label, _) in self._map.items():
+            color = self.color_map.get(index, self.color_map.get(label))
+            self._map[index][1] = color if color is not None else thelper.draw.get_label_color_mapping(index)
+
+    def report_csv(self):
+        # type: () -> Optional[AnyStr]
+        """Returns the class label/name/color mapping metadata.
+
+        The returned object is a print-friendly CSV string.
+        """
+        if not self._map:
+            return None
+        header = "index,label,color"
+        # don't use comma for color because of CSV
+        lines = [f"{index},{label},({color[0]} {color[1]} {color[2]})" for index, (label, color) in self._map.items()]
+        return "\n".join([header, *lines])
+
+    def report_text(self):
+        # type: () -> Optional[AnyStr]
+        return self.report_csv()
+
+    def report_json(self):
+        # type: () -> Optional[AnyStr]
+        if not self._map:
+            return None
+        items = [{"index": index, "label": label, "color": color.tolist()}
+                 for index, (label, color) in self._map.items()]
+        return json.dumps(items, sort_keys=False, indent=4, ensure_ascii=False)
+
+    def reset(self):
+        """Toggles a reset of the internal state."""
+        # must NOT reset color map here, otherwise we loose provided configs by user,
+        # which are more important in this case for result images vs whatever the model task specified
+        self.class_names = None
+        self._map = None
 
 
 @thelper.concepts.classification
